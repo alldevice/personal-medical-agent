@@ -87,6 +87,15 @@ class MedicalStore:
             con.executescript(SCHEMA)
 
     def store_bytes(self, content: bytes, filename: str | None) -> StoredDocument:
+        sha256 = hashlib.sha256(content).hexdigest()
+        existing = self.find_document_by_sha256(sha256)
+        if existing is not None:
+            return StoredDocument(
+                document_id=str(existing["id"]),
+                stored_path=Path(str(existing["stored_path"])),
+                sha256=sha256,
+            )
+
         today = datetime.now(timezone.utc).strftime("%Y/%m/%d")
         document_id = str(uuid4())
         safe_name = filename or "telegram_file.bin"
@@ -95,8 +104,59 @@ class MedicalStore:
         target_dir.mkdir(parents=True, exist_ok=True)
         stored_path = target_dir / f"{document_id}_{safe_name}"
         stored_path.write_bytes(content)
-        sha256 = hashlib.sha256(content).hexdigest()
         return StoredDocument(document_id=document_id, stored_path=stored_path, sha256=sha256)
+
+    def find_document_by_sha256(self, sha256: str) -> dict[str, str | None] | None:
+        with sqlite3.connect(self.db_path) as con:
+            con.row_factory = sqlite3.Row
+            row = con.execute(
+                """
+                SELECT id, original_filename, stored_path, sha256, mime_type,
+                       document_type, document_date, user_comment, processing_status
+                FROM documents
+                WHERE sha256 = ?
+                ORDER BY received_at ASC
+                LIMIT 1
+                """,
+                (sha256,),
+            ).fetchone()
+        return dict(row) if row is not None else None
+
+    def add_timeline_item(
+        self,
+        *,
+        document_id: str | None,
+        event_date: str | None,
+        event_type: str,
+        title: str,
+        body: str,
+        source_quote: str | None = None,
+        confidence: float | None = 0.5,
+        verified_by_user: int = 0,
+    ) -> str:
+        item_id = str(uuid4())
+        with sqlite3.connect(self.db_path) as con:
+            con.execute(
+                """
+                INSERT INTO timeline_items (
+                    id, document_id, event_date, event_type, title, body,
+                    source_quote, confidence, verified_by_user, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    item_id,
+                    document_id,
+                    event_date,
+                    event_type,
+                    title,
+                    body,
+                    source_quote,
+                    confidence,
+                    verified_by_user,
+                    utc_now(),
+                ),
+            )
+        return item_id
 
     def insert_document(
         self,
@@ -110,49 +170,52 @@ class MedicalStore:
         document_date: str | None,
         user_comment: str | None,
     ) -> None:
+        existing = self.get_document(document.document_id) if self._document_exists(document.document_id) else None
+        if existing is None:
+            with sqlite3.connect(self.db_path) as con:
+                con.execute(
+                    """
+                    INSERT INTO documents (
+                        id, telegram_user_id, telegram_message_id, original_filename,
+                        stored_path, sha256, mime_type, document_type, document_date,
+                        user_comment, received_at, processing_status
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        document.document_id,
+                        telegram_user_id,
+                        telegram_message_id,
+                        original_filename,
+                        str(document.stored_path),
+                        document.sha256,
+                        mime_type,
+                        document_type,
+                        document_date,
+                        user_comment,
+                        utc_now(),
+                        "stored",
+                    ),
+                )
+            event_type = "document_received"
+        else:
+            event_type = "duplicate_document_received"
+        title = document_type or (existing or {}).get("document_type") or "Medical document"
+        body = user_comment or "Document received via Telegram."
+        source_quote = f"duplicate sha256: {document.sha256}" if existing is not None else None
+        self.add_timeline_item(
+            document_id=document.document_id,
+            event_date=document_date or (existing or {}).get("document_date"),
+            event_type=event_type,
+            title=str(title),
+            body=body,
+            source_quote=source_quote,
+            confidence=0.5,
+        )
+
+    def _document_exists(self, document_id: str) -> bool:
         with sqlite3.connect(self.db_path) as con:
-            con.execute(
-                """
-                INSERT INTO documents (
-                    id, telegram_user_id, telegram_message_id, original_filename,
-                    stored_path, sha256, mime_type, document_type, document_date,
-                    user_comment, received_at, processing_status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    document.document_id,
-                    telegram_user_id,
-                    telegram_message_id,
-                    original_filename,
-                    str(document.stored_path),
-                    document.sha256,
-                    mime_type,
-                    document_type,
-                    document_date,
-                    user_comment,
-                    utc_now(),
-                    "stored",
-                ),
-            )
-            title = document_type or "Medical document"
-            body = user_comment or "Document received via Telegram."
-            con.execute(
-                """
-                INSERT INTO timeline_items (
-                    id, document_id, event_date, event_type, title, body, confidence, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    str(uuid4()),
-                    document.document_id,
-                    document_date,
-                    "document_received",
-                    title,
-                    body,
-                    0.5,
-                    utc_now(),
-                ),
-            )
+            row = con.execute("SELECT 1 FROM documents WHERE id = ?", (document_id,)).fetchone()
+        return row is not None
 
     def list_documents(self) -> list[dict[str, str | None]]:
         with sqlite3.connect(self.db_path) as con:
