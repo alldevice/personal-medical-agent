@@ -108,7 +108,21 @@ sudo -u hermes -H rm -f /tmp/medical-test.txt
 
 ## 8. Add Hermes profile
 
-Copy or reference `profiles/medical_agent/PROFILE.md` in the existing Hermes profile mechanism. The exact path depends on the current Hermes installation layout.
+First discover the existing Hermes profile layout instead of guessing it:
+
+```bash
+sudo -u hermes -H bash -lc '
+set -e
+printf "=== hermes home ===\n"
+pwd
+printf "=== likely Hermes dirs ===\n"
+find ~/.hermes -maxdepth 5 -type d 2>/dev/null | sort | sed -n "1,200p"
+printf "=== profile/instruction files ===\n"
+find ~/.hermes -maxdepth 7 \( -iname "*profile*" -o -iname "SOUL.md" -o -iname "*instruction*" -o -iname "*.md" \) -print 2>/dev/null | sort | sed -n "1,240p"
+'
+```
+
+Then copy or reference `profiles/medical_agent/PROFILE.md` in the same layout used by the existing profiles.
 
 Suggested profile name:
 
@@ -123,6 +137,8 @@ Use /srv/hermes-medical/repo/.venv/bin/medical-agent as the local storage tool.
 Store incoming medical attachments in the vault through `medical-agent ingest`.
 Use `medical-agent timeline` before answering timeline/history questions.
 ```
+
+If the profile path is unclear, paste the discovery output into the next operator session and decide the exact copy command from evidence.
 
 ## 9. First Telegram workflow
 
