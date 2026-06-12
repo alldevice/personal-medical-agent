@@ -247,6 +247,10 @@ def ingest_cache_file(
     )
 
 
+def result_created_document(result: TelegramCacheIngestResult) -> bool:
+    return result.status.startswith("ingested")
+
+
 def ingest_cache_dirs(
     store: MedicalStore,
     cache_dirs: Iterable[Path],
@@ -259,7 +263,7 @@ def ingest_cache_dirs(
         ingest_cache_file(store, path, dry_run=dry_run, update_index=update_index)
         for path in iter_candidate_files(cache_dirs)
     ]
-    if not dry_run and rebuild_after and results:
+    if not dry_run and rebuild_after and any(result_created_document(result) for result in results):
         rebuild_search_index(store)
     return results
 
