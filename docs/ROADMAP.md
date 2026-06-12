@@ -15,7 +15,7 @@ Research  needs investigation before implementation
 
 ### 1. End-to-end Telegram attachment ingest
 
-Status: Implemented for periodic Telegram cache ingest; final Telegram UX remains.
+Status: Implemented for periodic Telegram cache ingest and Telegram ingest replies; caption/cache policy remains.
 
 Goal: send a PDF/photo to the dedicated medical Telegram bot and have it stored automatically in the local vault.
 
@@ -32,10 +32,10 @@ Implemented:
 - A new Telegram image attachment was imported automatically without a manual runbook scan.
 - A live same-SHA duplicate group was reconciled after rollout: the canonical document was kept, richer metadata was preserved as timeline context, duplicate artifacts were moved to quarantine, and the search index was rebuilt.
 - Manual/agent ingest is idempotent by SHA: repeated content reuses the canonical document row and records later metadata/comment as timeline context instead of creating a second `documents` row.
+- The timer sends a Telegram reply for newly imported attachments and first-seen duplicate-SHA cache files when reply environment is enabled.
 
 Remaining acceptance:
 
-- Telegram reply includes document id, type/date if known, and SHA-256 prefix.
 - Caption/type/date/comment metadata is parsed more accurately from Russian and English captions.
 - Cache cleanup policy is explicit: Hermes cache may be temporary; `/srv/hermes-medical/data/raw` remains the medical source of truth.
 

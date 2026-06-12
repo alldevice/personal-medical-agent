@@ -13,6 +13,8 @@ def test_telegram_cache_ingest_service_runs_existing_cli_once() -> None:
     assert "User=hermes" in text
     assert "Group=hermes" in text
     assert "WorkingDirectory=/srv/hermes-medical/repo" in text
+    assert "EnvironmentFile=-/home/hermes/.hermes/profiles/medical_consultant/.env" in text
+    assert "HERMES_MEDICAL_TELEGRAM_REPLY_ENABLED=1" in text
     assert (
         "ExecStart=/srv/hermes-medical/repo/.venv/bin/medical-agent "
         "telegram-cache-ingest --once"

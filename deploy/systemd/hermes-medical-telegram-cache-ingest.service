@@ -10,4 +10,7 @@ User=hermes
 Group=hermes
 WorkingDirectory=/srv/hermes-medical/repo
 Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/srv/hermes-medical/config/.env
+EnvironmentFile=-/home/hermes/.hermes/profiles/medical_consultant/.env
+Environment=HERMES_MEDICAL_TELEGRAM_REPLY_ENABLED=1
 ExecStart=/srv/hermes-medical/repo/.venv/bin/medical-agent telegram-cache-ingest --once
