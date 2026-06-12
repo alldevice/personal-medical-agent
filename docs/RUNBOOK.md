@@ -118,7 +118,7 @@ Materialize the fast-access working copy while preserving the raw original:
 
 ```bash
 sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent extract --all
-sudo -u hermes -H find /srv/hermes-medical/data/extracted -maxdepth 3 -type f | sed -n '1,20p'
+sudo -u hermes -H find /srv/hermes-medical/data/extracted_text -maxdepth 3 -type f | sed -n '1,20p'
 ```
 
 Build the source-linked search index from extracted working copies and timeline notes:
@@ -299,3 +299,57 @@ Default scanned directories:
 - /home/hermes/.hermes/profiles/medical_consultant/image_cache
 
 This is intentionally a cache-to-vault adapter. The immutable source of truth remains /srv/hermes-medical/data/raw, and the Telegram cache may be cleaned by Hermes.
+
+## Telegram cache ingest timer
+
+The repository includes deployable systemd templates for a low-risk periodic scan:
+
+```text
+deploy/systemd/hermes-medical-telegram-cache-ingest.service
+deploy/systemd/hermes-medical-telegram-cache-ingest.timer
+```
+
+This timer does not start another Telegram poller and does not patch Hermes gateway internals. It only runs the existing idempotent command:
+
+```text
+/srv/hermes-medical/repo/.venv/bin/medical-agent telegram-cache-ingest --once
+```
+
+Install and enable after reviewing the checked-out repository diff:
+
+```bash
+sudo install -m 0644 -o root -g root \
+  /srv/hermes-medical/repo/deploy/systemd/hermes-medical-telegram-cache-ingest.service \
+  /etc/systemd/system/hermes-medical-telegram-cache-ingest.service
+sudo install -m 0644 -o root -g root \
+  /srv/hermes-medical/repo/deploy/systemd/hermes-medical-telegram-cache-ingest.timer \
+  /etc/systemd/system/hermes-medical-telegram-cache-ingest.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now hermes-medical-telegram-cache-ingest.timer
+```
+
+Before the first live run or before changing timer behavior, take a SQLite backup:
+
+```bash
+sudo -u hermes -H mkdir -p /srv/hermes-medical/data/backups
+sudo -u hermes -H cp -a \
+  /srv/hermes-medical/data/db/medical.sqlite \
+  /srv/hermes-medical/data/backups/medical.sqlite.before-telegram-cache-timer.$(date -u +%Y%m%dT%H%M%SZ)
+```
+
+Manual smoke check:
+
+```bash
+systemctl list-timers --all | grep hermes-medical-telegram-cache-ingest || true
+sudo systemctl start hermes-medical-telegram-cache-ingest.service
+sudo systemctl status hermes-medical-telegram-cache-ingest.service --no-pager -l
+sudo journalctl -u hermes-medical-telegram-cache-ingest.service -n 80 --no-pager
+sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent timeline --limit 5
+```
+
+Rollback/disable without deleting stored medical data:
+
+```bash
+sudo systemctl disable --now hermes-medical-telegram-cache-ingest.timer
+sudo systemctl daemon-reload
+```
