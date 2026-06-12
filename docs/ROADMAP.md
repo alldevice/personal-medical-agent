@@ -15,7 +15,7 @@ Research  needs investigation before implementation
 
 ### 1. End-to-end Telegram attachment ingest
 
-Status: Partially implemented; Now for final Telegram UX.
+Status: Partially implemented; Now for periodic automation and final Telegram UX.
 
 Goal: send a PDF/photo to the dedicated medical Telegram bot and have it stored automatically in the local vault.
 
@@ -27,10 +27,11 @@ Implemented:
 - SQLite document rows and timeline items are created for imported files.
 - Text/OCR extraction and SQLite FTS indexing run after ingest.
 - Duplicate SHA/cache-path handling prevents repeated ingest of the same cached file.
+- Deployable systemd oneshot/timer templates exist under `deploy/systemd/` for periodic idempotent cache scans without starting a second Telegram poller.
 
 Remaining acceptance:
 
-- Ingest is triggered automatically after new Telegram attachments, not only by a manual/runbook scan.
+- Enable the systemd timer on the live server and verify that a new Telegram attachment is imported without a manual runbook scan.
 - Telegram reply includes document id, type/date if known, and SHA-256 prefix.
 - Caption/type/date/comment metadata is parsed more accurately from Russian and English captions.
 - Cache cleanup policy is explicit: Hermes cache may be temporary; `/srv/hermes-medical/data/raw` remains the medical source of truth.
