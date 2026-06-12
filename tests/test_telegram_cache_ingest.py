@@ -56,3 +56,30 @@ def test_dry_run_existing_cache_path_reports_already_recorded(tmp_path: Path) ->
     assert len(dry_run) == 1
     assert dry_run[0].status == "already_recorded"
     assert dry_run[0].document_id == first[0].document_id
+
+
+def test_duplicate_scan_does_not_rebuild_index(tmp_path: Path, monkeypatch) -> None:
+    store = make_store(tmp_path)
+    cache = tmp_path / "cache" / "documents"
+    cache.mkdir(parents=True)
+    source = cache / "gastroscopy.txt"
+    source.write_text("Эрозии желудка после гастроскопии.", encoding="utf-8")
+
+    calls = 0
+
+    def fake_rebuild_search_index(_store: MedicalStore) -> int:
+        nonlocal calls
+        calls += 1
+        return 1
+
+    monkeypatch.setattr(
+        "hermes_medical_agent.telegram_cache_ingest.rebuild_search_index",
+        fake_rebuild_search_index,
+    )
+
+    first = ingest_cache_dirs(store, [cache])
+    second = ingest_cache_dirs(store, [cache])
+
+    assert first[0].status.startswith("ingested")
+    assert second[0].status == "already_recorded"
+    assert calls == 1
