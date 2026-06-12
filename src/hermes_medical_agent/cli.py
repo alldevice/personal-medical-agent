@@ -28,6 +28,13 @@ def build_parser() -> argparse.ArgumentParser:
     timeline = sub.add_parser("timeline", help="Print recent timeline items")
     timeline.add_argument("--limit", type=int, default=20)
 
+    extract = sub.add_parser(
+        "extract",
+        help="Materialize fast-access files under data/extracted while keeping raw originals",
+    )
+    extract.add_argument("--id", dest="document_id", default=None, help="Extract one document id")
+    extract.add_argument("--all", action="store_true", help="Extract all stored documents")
+
     return parser
 
 
@@ -73,6 +80,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         document_date=document_date,
         user_comment=comment,
     )
+    manifest = store.extract_document(stored.document_id)
 
     print("stored medical document")
     print(f"id={stored.document_id}")
@@ -80,6 +88,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     print(f"date={document_date or 'unknown'}")
     print(f"sha256={stored.sha256}")
     print(f"path={stored.stored_path}")
+    print(f"extracted_dir={manifest['extracted_dir']}")
     return 0
 
 
@@ -96,6 +105,33 @@ def cmd_timeline(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_extract(args: argparse.Namespace) -> int:
+    settings = load_settings()
+    store = MedicalStore(settings.medical_data_dir, settings.medical_db_path)
+    store.init()
+
+    if not args.all and not args.document_id:
+        raise SystemExit("use --all or --id <document_id>")
+    if args.all and args.document_id:
+        raise SystemExit("use either --all or --id, not both")
+
+    documents = store.list_documents() if args.all else [store.get_document(args.document_id)]
+    print(f"extracting documents={len(documents)} into {store.extracted_dir}")
+    for row in documents:
+        manifest = store.extract_document(str(row["id"]))
+        written_files = manifest["written_files"]
+        skipped_files = manifest["skipped_existing_files"]
+        assert isinstance(written_files, list)
+        assert isinstance(skipped_files, list)
+        print(
+            f"id={manifest['document_id']} "
+            f"written={len(written_files)} "
+            f"skipped={len(skipped_files)} "
+            f"dir={manifest['extracted_dir']}"
+        )
+    return 0
+
+
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
@@ -105,6 +141,8 @@ def main() -> int:
         return cmd_ingest(args)
     if args.command == "timeline":
         return cmd_timeline(args)
+    if args.command == "extract":
+        return cmd_extract(args)
     parser.error(f"unknown command: {args.command}")
     return 2
 
