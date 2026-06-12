@@ -98,6 +98,58 @@ class MedicalStore:
         sha256 = hashlib.sha256(content).hexdigest()
         return StoredDocument(document_id=document_id, stored_path=stored_path, sha256=sha256)
 
+    def find_document_by_sha256(self, sha256: str) -> dict[str, str | None] | None:
+        with sqlite3.connect(self.db_path) as con:
+            con.row_factory = sqlite3.Row
+            row = con.execute(
+                """
+                SELECT id, original_filename, stored_path, sha256, mime_type,
+                       document_type, document_date, user_comment, processing_status
+                FROM documents
+                WHERE sha256 = ?
+                ORDER BY received_at ASC
+                LIMIT 1
+                """,
+                (sha256,),
+            ).fetchone()
+        return dict(row) if row is not None else None
+
+    def add_timeline_item(
+        self,
+        *,
+        document_id: str | None,
+        event_date: str | None,
+        event_type: str,
+        title: str,
+        body: str,
+        source_quote: str | None = None,
+        confidence: float | None = 0.5,
+        verified_by_user: int = 0,
+    ) -> str:
+        item_id = str(uuid4())
+        with sqlite3.connect(self.db_path) as con:
+            con.execute(
+                """
+                INSERT INTO timeline_items (
+                    id, document_id, event_date, event_type, title, body,
+                    source_quote, confidence, verified_by_user, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    item_id,
+                    document_id,
+                    event_date,
+                    event_type,
+                    title,
+                    body,
+                    source_quote,
+                    confidence,
+                    verified_by_user,
+                    utc_now(),
+                ),
+            )
+        return item_id
+
     def insert_document(
         self,
         *,
@@ -134,25 +186,16 @@ class MedicalStore:
                     "stored",
                 ),
             )
-            title = document_type or "Medical document"
-            body = user_comment or "Document received via Telegram."
-            con.execute(
-                """
-                INSERT INTO timeline_items (
-                    id, document_id, event_date, event_type, title, body, confidence, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    str(uuid4()),
-                    document.document_id,
-                    document_date,
-                    "document_received",
-                    title,
-                    body,
-                    0.5,
-                    utc_now(),
-                ),
-            )
+        title = document_type or "Medical document"
+        body = user_comment or "Document received via Telegram."
+        self.add_timeline_item(
+            document_id=document.document_id,
+            event_date=document_date,
+            event_type="document_received",
+            title=title,
+            body=body,
+            confidence=0.5,
+        )
 
     def list_documents(self) -> list[dict[str, str | None]]:
         with sqlite3.connect(self.db_path) as con:
