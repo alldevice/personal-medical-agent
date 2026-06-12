@@ -305,6 +305,23 @@ This is intentionally a cache-to-vault adapter. The immutable source of truth re
 The repository includes deployable systemd templates for a low-risk periodic scan:
 
 ```text
+Telegram reply after successful ingest is optional and is enabled by the systemd unit with:
+
+```text
+HERMES_MEDICAL_TELEGRAM_REPLY_ENABLED=1
+```
+
+The unit loads both vault config and the medical profile env:
+
+```text
+/srv/hermes-medical/config/.env
+/home/hermes/.hermes/profiles/medical_consultant/.env
+```
+
+Reply delivery uses the existing `TELEGRAM_BOT_TOKEN`. The target chat is selected by `HERMES_MEDICAL_TELEGRAM_REPLY_CHAT_ID`, or otherwise by a single numeric value from `TELEGRAM_ALLOWED_USERS`. If `TELEGRAM_ALLOWED_USERS` contains more than one user, set `HERMES_MEDICAL_TELEGRAM_REPLY_CHAT_ID` explicitly in `/home/hermes/.hermes/profiles/medical_consultant/.env`.
+
+New imports receive a Telegram reply with document id, type, date, SHA prefix, ingest status, processing status, and source filename. Already-recorded cache paths are not re-notified on every timer run.
+
 deploy/systemd/hermes-medical-telegram-cache-ingest.service
 deploy/systemd/hermes-medical-telegram-cache-ingest.timer
 ```

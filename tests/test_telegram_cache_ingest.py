@@ -1,7 +1,10 @@
 from pathlib import Path
 
 from hermes_medical_agent.storage import MedicalStore
-from hermes_medical_agent.telegram_cache_ingest import ingest_cache_dirs
+from hermes_medical_agent.telegram_cache_ingest import (
+    ingest_cache_dirs,
+    resolve_telegram_reply_config,
+)
 
 
 def make_store(tmp_path: Path) -> MedicalStore:
@@ -83,3 +86,63 @@ def test_duplicate_scan_does_not_rebuild_index(tmp_path: Path, monkeypatch) -> N
     assert first[0].status.startswith("ingested")
     assert second[0].status == "already_recorded"
     assert calls == 1
+
+def test_telegram_reply_config_uses_single_allowed_user_when_enabled(monkeypatch) -> None:
+    monkeypatch.setenv("HERMES_MEDICAL_TELEGRAM_REPLY_ENABLED", "1")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("TELEGRAM_ALLOWED_USERS", "123456")
+
+    config = resolve_telegram_reply_config()
+
+    assert config is not None
+    assert config.bot_token == "test-token"
+    assert config.chat_id == "123456"
+
+
+def test_telegram_reply_config_requires_unambiguous_chat(monkeypatch) -> None:
+    monkeypatch.setenv("HERMES_MEDICAL_TELEGRAM_REPLY_ENABLED", "1")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("TELEGRAM_ALLOWED_USERS", "123,456")
+
+    assert resolve_telegram_reply_config() is None
+
+    monkeypatch.setenv("HERMES_MEDICAL_TELEGRAM_REPLY_CHAT_ID", "789")
+    config = resolve_telegram_reply_config()
+
+    assert config is not None
+    assert config.chat_id == "789"
+
+
+def test_ingest_sends_reply_for_new_file_only(tmp_path: Path, monkeypatch) -> None:
+    store = make_store(tmp_path)
+    cache = tmp_path / "cache" / "images"
+    cache.mkdir(parents=True)
+    source = cache / "photo.jpg"
+    source.write_bytes(b"fake jpg bytes")
+
+    sent: list[tuple[str, str]] = []
+
+    def fake_send(config, text):
+        sent.append((config.chat_id, text))
+
+    monkeypatch.setenv("HERMES_MEDICAL_TELEGRAM_REPLY_ENABLED", "1")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("TELEGRAM_ALLOWED_USERS", "123456")
+    monkeypatch.setattr(
+        "hermes_medical_agent.telegram_cache_ingest.send_telegram_message",
+        fake_send,
+    )
+
+    first = ingest_cache_dirs(store, [cache])
+    assert first[0].status.startswith("ingested")
+    assert len(sent) == 1
+    assert sent[0][0] == "123456"
+    assert "✅ Документ импортирован" in sent[0][1]
+    assert str(first[0].document_id) in sent[0][1]
+    assert "sha:" in sent[0][1]
+
+    sent.clear()
+    second = ingest_cache_dirs(store, [cache])
+    assert second[0].status == "already_recorded"
+    assert sent == []
+
