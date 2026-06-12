@@ -1,0 +1,13 @@
+[Unit]
+Description=Import Hermes medical Telegram cache into the local medical vault
+Documentation=https://github.com/alldevice/personal-medical-agent/blob/main/docs/RUNBOOK.md
+After=hermes-medical-consultant-gateway.service
+Wants=hermes-medical-consultant-gateway.service
+
+[Service]
+Type=oneshot
+User=hermes
+Group=hermes
+WorkingDirectory=/srv/hermes-medical/repo
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/srv/hermes-medical/repo/.venv/bin/medical-agent telegram-cache-ingest --once
