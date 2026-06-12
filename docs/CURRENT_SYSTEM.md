@@ -146,6 +146,10 @@ Available commands:
 medical-agent init
 medical-agent ingest
 medical-agent timeline
+medical-agent extract
+medical-agent index
+medical-agent search
+medical-agent summary
 ```
 
 Smoke test command:
@@ -196,8 +200,8 @@ Historical note: early pre-alias Honcho rows may contain peer `237187787`. New m
 ## Current limitations
 
 - Telegram attachment-to-vault ingest is not yet fully automated end-to-end.
-- Raw files and SQLite exist locally; text extraction/OCR is future work.
-- Search over stored content is not yet implemented.
+- Basic extracted working copies, text extraction, OCR hook, and SQLite FTS search now exist as CLI capabilities.
+- Telegram commands for search/summary and deeper medical comparison workflows are not yet integrated into the live bot.
 - Honcho conversational memory is integrated, but only as non-authoritative conversation/context memory.
 - Multi-user mode is not yet implemented.
 - Postgres is not yet used; SQLite is the current database.

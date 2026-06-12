@@ -100,6 +100,8 @@ Expected: `medical.sqlite` exists.
 
 ## 7. Manual ingest smoke test
 
+Create and ingest a synthetic source file:
+
 ```bash
 cd /
 sudo -u hermes -H bash -lc 'echo "synthetic test document" > /tmp/medical-test.txt'
@@ -109,7 +111,8 @@ sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent ingest \
   --date "2026-06-12" \
   --comment "MVP smoke test"
 sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent timeline --limit 5
-
+sudo -u hermes -H rm -f /tmp/medical-test.txt
+```
 
 Materialize the fast-access working copy while preserving the raw original:
 
@@ -117,8 +120,16 @@ Materialize the fast-access working copy while preserving the raw original:
 sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent extract --all
 sudo -u hermes -H find /srv/hermes-medical/data/extracted -maxdepth 3 -type f | sed -n '1,20p'
 ```
-sudo -u hermes -H rm -f /tmp/medical-test.txt
+
+Build the source-linked search index from extracted working copies and timeline notes:
+
+```bash
+sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent index --all
+sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent search "test document" --limit 5
+sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent summary "test document" --limit 5
 ```
+
+Search output must show source document ids and snippets. Treat `summary` output as source-linked material only; medical interpretation must remain separate from document facts.
 
 ## 8. Create or refresh Hermes profile
 
