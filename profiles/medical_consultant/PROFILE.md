@@ -43,3 +43,17 @@ When answering medical questions:
 /srv/hermes-medical/repo/.venv/bin/medical-agent init
 /srv/hermes-medical/repo/.venv/bin/medical-agent timeline --limit 20
 ```
+
+
+## Working copy and extraction policy
+
+- Raw originals in `/srv/hermes-medical/data/raw` remain the source of truth.
+- Extracted files are fast-access working copies for reading, search, and summarization.
+- Extracted files must be reproducible from raw originals and must not replace them.
+- After ingesting documents, use:
+
+```bash
+/srv/hermes-medical/repo/.venv/bin/medical-agent extract --all
+```
+
+- When answering, distinguish raw source facts, extracted text, and model interpretation.

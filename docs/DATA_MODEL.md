@@ -1,5 +1,17 @@
 # Data Model MVP
 
+## Vault file layers
+
+The vault uses a layered storage model:
+
+- `/srv/hermes-medical/data/raw` — immutable originals exactly as received from the user. A ZIP stays a ZIP; a PDF stays a PDF.
+- `/srv/hermes-medical/data/extracted/<document_id>/files` — one-time materialized working copy for fast access. ZIP members are flattened into short safe filenames; non-ZIP originals are copied here too.
+- `/srv/hermes-medical/data/extracted/<document_id>/manifest.json` — machine-readable link from working files back to the raw source path and SHA-256.
+- `/srv/hermes-medical/data/extracted_text` — future text/OCR output for search and summaries.
+- `/srv/hermes-medical/data/db/medical.sqlite` — SQLite metadata and timeline.
+
+Medical data directories are outside the Git repository and must not be committed.
+
 ## documents
 
 One row per original file received from Telegram.

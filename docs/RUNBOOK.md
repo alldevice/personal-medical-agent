@@ -109,6 +109,14 @@ sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent ingest \
   --date "2026-06-12" \
   --comment "MVP smoke test"
 sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent timeline --limit 5
+
+
+Materialize the fast-access working copy while preserving the raw original:
+
+```bash
+sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent extract --all
+sudo -u hermes -H find /srv/hermes-medical/data/extracted -maxdepth 3 -type f | sed -n '1,20p'
+```
 sudo -u hermes -H rm -f /tmp/medical-test.txt
 ```
 
