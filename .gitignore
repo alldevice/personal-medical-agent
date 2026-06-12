@@ -1,0 +1,20 @@
+# local secrets
+.env
+config/.env
+config/*.local.yaml
+config/*.secret.*
+
+# local medical data
+/data/*
+!/data/.gitkeep
+
+# Python/cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
