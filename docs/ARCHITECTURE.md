@@ -1,21 +1,40 @@
 # Architecture
 
-## Principle
+## MVP principle
 
-Docker contains tools. The mounted data volume contains life.
+Use the existing Hermes ecosystem first. Do not create a separate Docker runtime for the MVP.
+
+```text
+existing Hermes Telegram gateway
+  -> Hermes profile: medical_agent
+  -> local CLI: /srv/hermes-medical/repo/.venv/bin/medical-agent
+  -> local vault: /srv/hermes-medical/data
+  -> SQLite: /srv/hermes-medical/data/db/medical.sqlite
+```
 
 ## Components
 
-- Telegram bot: single MVP interface.
-- Medical store: local filesystem vault plus SQLite index.
-- Ingest pipeline: receive file, store original, hash, parse caption, create timeline event.
-- Future extractor: PDF text, OCR, DICOM metadata, ECG raw signal parsing.
-- Future retrieval: SQLite full-text search and optional vector index.
-- Future Hermes integration: Hermes profile runs inside the container or calls this bot/CLI as a tool.
+- `medical_agent` Hermes profile: user-facing medical archive assistant.
+- Local CLI: deterministic storage operations (`init`, `ingest`, `timeline`).
+- Medical store: filesystem vault plus SQLite index.
+- Raw storage: original PDFs/images/DICOM/ECG files kept unchanged.
+- Timeline: chronological source-linked medical events.
+- Future extraction: PDF text, OCR, DICOM metadata, ECG raw signal parsing.
+- Future retrieval: SQLite FTS and optional vector index/Honcho integration.
+
+## User and permission model
+
+- `aiadmin`/root: server setup, apt, systemd, firewall, permissions.
+- `hermes`: owns `/srv/hermes-medical/repo`, `/srv/hermes-medical/data`, `/srv/hermes-medical/config`.
+- `hermes` should not be added to the Docker group for this MVP.
 
 ## Data boundaries
 
 - Never commit real medical data.
 - Never commit Telegram/OpenAI/provider credentials.
-- Keep `config/.env` local.
-- Keep `data/` local.
+- Keep `/srv/hermes-medical/config/.env` local.
+- Keep `/srv/hermes-medical/data/` local.
+
+## Future Docker mode
+
+Docker can be reintroduced later as a packaging/distribution mode. It is intentionally not the primary MVP path.
