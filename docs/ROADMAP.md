@@ -89,7 +89,7 @@ Acceptance:
 
 ### 5. PDF text extraction
 
-Status: Next
+Status: Implemented as basic CLI layer; continue improving quality and Telegram integration.
 
 Use `pypdf` for text-based PDFs.
 
@@ -101,7 +101,7 @@ Acceptance:
 
 ### 6. OCR for photos and scanned PDFs
 
-Status: Next
+Status: Implemented as basic local OCR hook; continue improving language packs, quality flags, and scanned-PDF handling.
 
 Use local OCR tools first. Keep OCR output clearly separated from original source facts.
 
@@ -113,7 +113,7 @@ Acceptance:
 
 ### 7. SQLite full-text search
 
-Status: Next
+Status: Implemented as basic CLI FTS over extracted text and timeline notes; Telegram command integration remains next.
 
 Add FTS over extracted text and timeline notes.
 
@@ -128,6 +128,14 @@ Acceptance:
 
 - search returns source document ids;
 - answer distinguishes exact source text, extracted text, and interpretation.
+
+Implementation note: basic CLI commands now exist:
+
+- `medical-agent index --all`
+- `medical-agent search <query>`
+- `medical-agent summary <topic>`
+
+Remaining work: expose safe Telegram commands, improve OCR quality reporting, and add medical event normalization before correlation-style assistance.
 
 ### 8. Timeline normalization
 
