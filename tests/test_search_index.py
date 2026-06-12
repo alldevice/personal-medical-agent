@@ -67,3 +67,30 @@ def test_rebuild_index_includes_timeline_notes(tmp_path: Path) -> None:
     assert count >= 1
     assert hits
     assert any(hit["scope"] == "timeline_note" for hit in hits)
+
+def test_russian_prefix_search_matches_inflected_medical_terms(tmp_path: Path) -> None:
+    store = make_store(tmp_path)
+
+    stored = store.store_bytes(
+        "Эрозии желудка описаны после гастроскопии.".encode("utf-8"),
+        "endo.txt",
+    )
+    store.insert_document(
+        document=stored,
+        telegram_user_id=237187787,
+        telegram_message_id=3,
+        original_filename="endo.txt",
+        mime_type="text/plain",
+        document_type="эндоскопия",
+        document_date="2026-06-10",
+        user_comment="заключение",
+    )
+
+    extract_text_for_document(store, stored.document_id)
+
+    erosion_hits = search_documents(store, "эрозия", limit=5)
+    gastro_hits = search_documents(store, "гастро", limit=5)
+
+    assert any(hit["document_id"] == stored.document_id for hit in erosion_hits)
+    assert any(hit["document_id"] == stored.document_id for hit in gastro_hits)
+
