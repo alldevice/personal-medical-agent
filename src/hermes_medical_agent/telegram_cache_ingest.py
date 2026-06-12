@@ -115,7 +115,7 @@ def already_recorded(store: MedicalStore, cache_path: Path, sha256: str) -> tupl
             (str(cache_path),),
         ).fetchone()
         if by_path is not None:
-            return True, by_path["document_id"], by_path["status"]
+            return True, by_path["document_id"], "already_recorded"
 
         by_sha = con.execute(
             "SELECT id FROM documents WHERE sha256 = ? ORDER BY received_at ASC LIMIT 1",
