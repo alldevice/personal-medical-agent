@@ -1,12 +1,27 @@
-# MVP runbook: Hermes medical profile without Docker
+# MVP runbook: medical_consultant Hermes profile without Docker
 
-## 0. Decision
+## 0. Live decision
 
-The MVP is a Hermes profile plus local vault and CLI tools. There is no standalone Docker container and no separate Telegram bot in the primary path.
+The MVP is a Hermes profile plus local vault and CLI tools. There is no standalone Docker container.
+
+The live profile name is:
 
 ```text
-existing Hermes Telegram gateway
-  -> Hermes profile medical_agent
+medical_consultant
+```
+
+The live gateway service is:
+
+```text
+hermes-medical-consultant-gateway.service
+```
+
+Runtime shape:
+
+```text
+Telegram dedicated medical bot
+  -> hermes-medical-consultant-gateway.service
+  -> Hermes profile medical_consultant
   -> /srv/hermes-medical/repo/.venv/bin/medical-agent
   -> /srv/hermes-medical/data
 ```
@@ -15,11 +30,12 @@ existing Hermes Telegram gateway
 
 - Server user `aiadmin` exists and has sudo.
 - Server user `hermes` exists.
-- Existing Hermes runtime and Telegram gateway already work.
-- Existing Hermes OpenAI subscription/OAuth/provider credentials already work.
+- Existing Hermes runtime works.
+- Existing `kanban_operator` profile works.
+- A second Telegram bot token has been created for `medical_consultant`.
 - Do not add `hermes` to the Docker group.
 
-## 2. Create directories
+## 2. Create vault directories
 
 Run as `aiadmin`:
 
@@ -36,34 +52,36 @@ sudo -u hermes -H mkdir -p \
   /srv/hermes-medical/data/db \
   /srv/hermes-medical/data/audit \
   /srv/hermes-medical/data/backups
+sudo chmod 700 /srv/hermes-medical/data
+sudo find /srv/hermes-medical/data -type d -exec chmod 700 {} \;
+sudo find /srv/hermes-medical/data -type f -exec chmod 600 {} \;
+sudo chown -R hermes:hermes /srv/hermes-medical/data
 ```
 
 ## 3. Clone repository
 
-Run as `aiadmin`:
+Use SSH, not GitHub password authentication:
 
 ```bash
-sudo -u hermes -H git clone https://github.com/alldevice/personal-medical-agent.git /srv/hermes-medical/repo
+sudo -u hermes -H git clone git@github.com:alldevice/personal-medical-agent.git /srv/hermes-medical/repo
 sudo -u hermes -H git -C /srv/hermes-medical/repo status --short
 ```
 
-Expected: clean working tree.
-
-## 4. Create local config
-
-Run as `aiadmin`:
+## 4. Create local medical config
 
 ```bash
 sudo -u hermes -H cp /srv/hermes-medical/repo/config/.env.example /srv/hermes-medical/config/.env
 sudo chmod 600 /srv/hermes-medical/config/.env
-sudo -u hermes -H sed -n '1,120p' /srv/hermes-medical/config/.env
+sudo -u hermes -H sed -i 's/^HERMES_MEDICAL_PROFILE=.*/HERMES_MEDICAL_PROFILE=medical_consultant/' /srv/hermes-medical/config/.env
 ```
 
-The MVP does not need a Telegram bot token in this file because it uses the existing Hermes Telegram gateway.
+This file is for vault settings. The dedicated Telegram bot token must be stored in the Hermes profile env:
+
+```text
+/home/hermes/.hermes/profiles/medical_consultant/.env
+```
 
 ## 5. Create Python virtualenv
-
-Run as `aiadmin`:
 
 ```bash
 sudo -u hermes -H python3 -m venv /srv/hermes-medical/repo/.venv
@@ -72,8 +90,6 @@ sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/pip install -e /srv/hermes-
 ```
 
 ## 6. Initialize SQLite vault
-
-Run as `aiadmin`:
 
 ```bash
 sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent init
@@ -84,89 +100,113 @@ Expected: `medical.sqlite` exists.
 
 ## 7. Manual ingest smoke test
 
-Create a temporary fake file and ingest it:
-
 ```bash
+cd /
 sudo -u hermes -H bash -lc 'echo "synthetic test document" > /tmp/medical-test.txt'
-
 sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent ingest \
   --file /tmp/medical-test.txt \
   --type "test-document" \
   --date "2026-06-12" \
   --comment "MVP smoke test"
-
 sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent timeline --limit 5
-```
-
-Expected: timeline contains the test document.
-
-Optional cleanup:
-
-```bash
 sudo -u hermes -H rm -f /tmp/medical-test.txt
 ```
 
-## 8. Add Hermes profile
+## 8. Create or refresh Hermes profile
 
-First discover the existing Hermes profile layout instead of guessing it:
+The live profile path is:
+
+```text
+/home/hermes/.hermes/profiles/medical_consultant
+```
+
+Use `profiles/medical_consultant/PROFILE.md` as the source profile instruction. The live `SOUL.md` should contain the same safety and source-of-truth boundaries.
+
+`medical_consultant` should use the same provider/auth style as `kanban_operator`, but not the same Telegram bot token.
+
+## 9. Configure dedicated Telegram bot token
+
+Create the dedicated bot in BotFather, then store its token only on the server. Do not paste the token into Git, docs, logs, or chat transcripts.
+
+The profile env must be a real file, not a symlink to shared `.env`:
+
+```text
+/home/hermes/.hermes/profiles/medical_consultant/.env
+```
+
+It should contain:
+
+```text
+TELEGRAM_BOT_TOKEN=<medical bot token>
+TELEGRAM_ALLOWED_USERS=<same allowed users policy as needed>
+HERMES_MEDICAL_PROFILE=medical_consultant
+```
+
+## 10. Install systemd gateway
+
+Service path:
+
+```text
+/etc/systemd/system/hermes-medical-consultant-gateway.service
+```
+
+Expected `ExecStart`:
+
+```text
+/home/hermes/.local/bin/hermes --profile medical_consultant gateway run
+```
+
+Expected working directory:
+
+```text
+/srv/hermes-medical/repo
+```
+
+The service should run as `hermes:hermes` and include the same proxy environment as `hermes-kanban-operator-gateway.service`.
+
+## 11. Verify runtime
 
 ```bash
-sudo -u hermes -H bash -lc '
-set -e
-printf "=== hermes home ===\n"
-pwd
-printf "=== likely Hermes dirs ===\n"
-find ~/.hermes -maxdepth 5 -type d 2>/dev/null | sort | sed -n "1,200p"
-printf "=== profile/instruction files ===\n"
-find ~/.hermes -maxdepth 7 \( -iname "*profile*" -o -iname "SOUL.md" -o -iname "*instruction*" -o -iname "*.md" \) -print 2>/dev/null | sort | sed -n "1,240p"
-'
+systemctl status hermes-medical-consultant-gateway.service --no-pager -l
+journalctl -u hermes-medical-consultant-gateway.service -n 120 --no-pager
+sudo -u hermes -H bash -lc 'export HOME=/home/hermes; export PATH=/home/hermes/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; /home/hermes/.local/bin/hermes gateway list'
 ```
 
-Then copy or reference `profiles/medical_agent/PROFILE.md` in the same layout used by the existing profiles.
-
-Suggested profile name:
+Expected:
 
 ```text
-medical_agent
+kanban_operator       running
+medical_consultant    running
 ```
 
-Minimum profile instruction:
+## 12. First Telegram check
+
+Send to the dedicated medical bot:
 
 ```text
-Use /srv/hermes-medical/repo/.venv/bin/medical-agent as the local storage tool.
-Store incoming medical attachments in the vault through `medical-agent ingest`.
-Use `medical-agent timeline` before answering timeline/history questions.
+/start
 ```
 
-If the profile path is unclear, paste the discovery output into the next operator session and decide the exact copy command from evidence.
-
-## 9. First Telegram workflow
-
-Send a medical file to the existing Hermes Telegram gateway and route it to `medical_agent`.
-
-Caption example:
+Then:
 
 ```text
-type: EGD
-date: 2026-06-10
-comment: stomach pain evaluation
+Привет. Кто ты и какой у тебя профиль?
 ```
 
-The profile should save the attachment locally, call `medical-agent ingest`, then answer with the document id, type, date and SHA-256 prefix.
+Expected answer: the bot identifies itself as Hermes Agent profile `medical_consultant`.
 
-## 10. Acceptance checklist
+If Telegram says no home channel is set, send:
 
-```bash
-sudo test -d /srv/hermes-medical/repo && echo OK_repo
-sudo test -d /srv/hermes-medical/data && echo OK_data
-sudo test -f /srv/hermes-medical/data/db/medical.sqlite && echo OK_db
-sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent timeline --limit 5
+```text
+/sethome
 ```
 
-Acceptance:
+## 13. Acceptance checklist
 
-- repository is cloned under `/srv/hermes-medical/repo`;
-- real vault is outside Git under `/srv/hermes-medical/data`;
-- config is outside Git under `/srv/hermes-medical/config`;
-- CLI works as `hermes`;
-- profile `medical_agent` can call the CLI.
+- `/home/hermes/.hermes/profiles/medical_consultant` exists.
+- `/home/hermes/.hermes/profiles/medical_consultant/.env` is a real file with the dedicated bot token.
+- `/home/hermes/.hermes/profiles/medical_consultant/auth.json` exists.
+- `/srv/hermes-medical/data/db/medical.sqlite` exists.
+- `medical-agent timeline --limit 5` works as `hermes`.
+- `hermes gateway list` shows both `kanban_operator` and `medical_consultant` running.
+- Telegram bot answers as `medical_consultant`.
