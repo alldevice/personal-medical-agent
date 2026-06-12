@@ -452,3 +452,7 @@ Acceptance:
 
 - PR cannot accidentally add obvious secrets;
 - tests run on every PR.
+
+- Telegram attachment ingest:
+  - Implemented first safe layer: medical-agent telegram-cache-ingest --once imports files already cached by Hermes Telegram gateway into the medical vault and FTS index.
+  - Remaining: direct Telegram reply with document id/type/date/SHA after ingest.

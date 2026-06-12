@@ -280,3 +280,22 @@ honcho_profile peer=user
 - `hermes gateway list` shows both `kanban_operator` and `medical_consultant` running.
 - Telegram bot answers as `medical_consultant`.
 - Honcho medical workspace uses `human_sergei` for the Telegram user alias and does not write new user messages as raw `237187787`.
+
+## Telegram cache ingest
+
+The Hermes Telegram gateway downloads supported inbound files to the profile cache. Import those cached files into the medical vault and search index with this command:
+
+    sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent telegram-cache-ingest --once
+
+Dry run:
+
+    sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent telegram-cache-ingest --once --dry-run
+
+Default scanned directories:
+
+- /home/hermes/.hermes/profiles/medical_consultant/cache/documents
+- /home/hermes/.hermes/profiles/medical_consultant/document_cache
+- /home/hermes/.hermes/profiles/medical_consultant/cache/images
+- /home/hermes/.hermes/profiles/medical_consultant/image_cache
+
+This is intentionally a cache-to-vault adapter. The immutable source of truth remains /srv/hermes-medical/data/raw, and the Telegram cache may be cleaned by Hermes.

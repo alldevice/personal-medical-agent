@@ -12,6 +12,11 @@ from hermes_medical_agent.search_index import (
     rebuild_search_index,
     search_documents,
 )
+from hermes_medical_agent.telegram_cache_ingest import (
+    default_cache_dirs,
+    ingest_cache_dirs,
+    watch_cache_dirs,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -52,6 +57,34 @@ def build_parser() -> argparse.ArgumentParser:
     summary = sub.add_parser("summary", help="Source-linked search summary for a topic")
     summary.add_argument("topic", help="Topic to summarize from stored sources")
     summary.add_argument("--limit", type=int, default=10)
+
+
+    telegram_cache_ingest = sub.add_parser(
+        "telegram-cache-ingest",
+        help="Import files cached by the Hermes Telegram gateway into the medical vault",
+    )
+    telegram_cache_ingest.add_argument(
+        "--cache-dir",
+        action="append",
+        default=[],
+        help="Hermes Telegram cache directory to scan; can be repeated",
+    )
+    telegram_cache_ingest.add_argument(
+        "--once",
+        action="store_true",
+        help="Run one scan and exit",
+    )
+    telegram_cache_ingest.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show candidates without ingesting",
+    )
+    telegram_cache_ingest.add_argument(
+        "--interval",
+        type=float,
+        default=30.0,
+        help="Polling interval for watch mode",
+    )
 
     return parser
 
@@ -207,6 +240,49 @@ def cmd_search(args: argparse.Namespace) -> int:
     return 0
 
 
+
+def cmd_telegram_cache_ingest(args: argparse.Namespace) -> int:
+    settings = load_settings()
+    store = MedicalStore(settings.medical_data_dir, settings.medical_db_path)
+    store.init()
+
+    cache_dirs = [Path(path) for path in args.cache_dir] if args.cache_dir else default_cache_dirs()
+    if not cache_dirs:
+        print("no Telegram cache directories found")
+        return 0
+
+    print("telegram cache dirs:")
+    for path in cache_dirs:
+        print(f"- {path}")
+
+    total_seen = 0
+    total_new = 0
+
+    for results in watch_cache_dirs(
+        store,
+        cache_dirs,
+        interval_seconds=args.interval,
+        once=args.once,
+        dry_run=args.dry_run,
+    ):
+        total_seen += len(results)
+        for result in results:
+            short_sha = result.sha256[:12] if result.sha256 else "n/a"
+            doc = result.document_id or "n/a"
+            print(
+                f"{result.status} id={doc} sha={short_sha} path={result.path}"
+                + (f" reason={result.reason}" if result.reason else "")
+            )
+            if result.status.startswith("ingested"):
+                total_new += 1
+
+        if args.once:
+            break
+
+    print(f"telegram-cache-ingest seen={total_seen} new={total_new}")
+    return 0
+
+
 def cmd_summary(args: argparse.Namespace) -> int:
     settings = load_settings()
     store = MedicalStore(settings.medical_data_dir, settings.medical_db_path)
@@ -247,6 +323,8 @@ def main() -> int:
         return cmd_search(args)
     if args.command == "summary":
         return cmd_summary(args)
+    if args.command == "telegram-cache-ingest":
+        return cmd_telegram_cache_ingest(args)
     parser.error(f"unknown command: {args.command}")
     return 2
 
