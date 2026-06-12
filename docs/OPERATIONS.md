@@ -54,6 +54,36 @@ Expected:
 /srv/hermes-medical/data/db/medical.sqlite
 ```
 
+## Recording patient self-reports
+
+Use self-reports for clinically relevant patient-provided facts without an attached source document: medication actually taken, suspected allergies, symptom updates, home measurements, and uncertainty/corrections.
+
+Rules:
+
+- Keep them separate from clinician-issued records by using document type `самоотчёт пациента: <topic>`.
+- Prefix comments and timeline wording with `Со слов пациента:`.
+- Preserve uncertainty verbatim: do not turn `скорее всего Моксиклав` into a confirmed allergy.
+- If a newer self-report corrects an older one, ingest the correction and soften the older timeline wording.
+
+Example:
+
+```bash
+cat > /tmp/2026-06-12_patient_report_allergy_update.md <<'EOF'
+# Самоотчёт пациента: аллергологический анамнез
+
+Дата сообщения: 2026-06-12
+Источник: Telegram
+
+Со слов пациента: вероятная аллергическая реакция на Моксиклав в анамнезе; точный антибиотик не подтверждён. Также аллергия на пыльцу берёзы / поллиноз, обычно апрель–май.
+EOF
+
+sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent ingest \
+  --file /tmp/2026-06-12_patient_report_allergy_update.md \
+  --type 'самоотчёт пациента: аллергологический анамнез' \
+  --date '2026-06-12' \
+  --comment 'Со слов пациента: вероятная аллергия на Моксиклав в анамнезе, точный антибиотик не подтверждён; аллергия на пыльцу берёзы/поллиноз ежегодно апрель–май.'
+```
+
 ## Manual ingest test
 
 Use only synthetic or intentionally selected files.

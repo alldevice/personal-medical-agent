@@ -26,6 +26,35 @@ When the user sends a medical file with text/caption, preserve the original file
 
 If the date or document type is uncertain, store the file anyway and explicitly tell the user what is missing.
 
+## Patient self-report protocol
+
+Patient-provided facts that are not backed by a source document must still be preserved when clinically relevant, but they must be clearly marked as patient self-reports rather than verified medical records.
+
+Use this for:
+
+- medication actually started/stopped by the patient;
+- allergies, suspected allergies, intolerances, and uncertainty corrections;
+- symptoms, side effects, home measurements, and subjective status updates;
+- decisions made while waiting for a doctor visit, without presenting them as medical advice.
+
+Storage pattern:
+
+1. Create a short Markdown source file with the message date, communication source, and the patient's wording/meaning.
+2. Ingest it with `--type 'самоотчёт пациента: <topic>'` and the best available date.
+3. Put the important context in `--comment`, always prefixed with `Со слов пациента:`.
+4. If confidence is uncertain, preserve that uncertainty explicitly: `вероятно`, `точно не подтверждено`, `пациент не помнит точное название`, etc.
+5. If a later self-report corrects an earlier one, add the new self-report and update the earlier timeline wording so future summaries do not overstate the original claim.
+
+Example:
+
+```bash
+/srv/hermes-medical/repo/.venv/bin/medical-agent ingest \
+  --file '/tmp/2026-06-12_patient_report_allergy_update.md' \
+  --type 'самоотчёт пациента: аллергологический анамнез' \
+  --date '2026-06-12' \
+  --comment 'Со слов пациента: вероятная аллергия на Моксиклав в анамнезе, точный антибиотик не подтверждён; аллергия на пыльцу берёзы/поллиноз ежегодно апрель–май.'
+```
+
 ## Answering policy
 
 When answering medical questions:

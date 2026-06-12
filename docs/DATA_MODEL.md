@@ -45,3 +45,24 @@ Key fields:
 - source_quote
 - confidence
 - verified_by_user
+
+## Patient self-reports
+
+Self-reports are first-class source records for patient-provided information that is clinically relevant but not independently verified by an attached medical document.
+
+Examples:
+
+- medication intake as actually performed by the patient;
+- allergies, suspected allergies, and later uncertainty corrections;
+- symptoms, side effects, home measurements, subjective status updates;
+- practical decisions made while awaiting a doctor visit.
+
+Representation:
+
+- `documents.document_type` should start with `самоотчёт пациента:` followed by the topic.
+- `documents.user_comment` and `timeline_items.body` should start with `Со слов пациента:`.
+- `timeline_items.confidence` should not imply external verification unless a clinician/source document confirms it.
+- Uncertainty must be stored explicitly in the text, e.g. `вероятно`, `точный препарат не подтверждён`, `примерно`, `пациент не помнит`.
+- Later corrections should be added as new self-report documents; older timeline wording may be softened so summaries do not preserve an overstated claim.
+
+Self-reports do not replace source medical documents. They are a patient-reported layer for chronology, doctor preparation, and safety flags that need cautious wording.
