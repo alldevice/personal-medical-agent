@@ -385,3 +385,77 @@ Acceptance:
 
 - documented key management;
 - tested restore;
+- no lockout risk from forgotten keys.
+
+## Packaging and deployment
+
+### 21. Optional Docker mode
+
+Status: Later
+
+Docker can return as an optional packaging mode, not the primary local MVP path.
+
+Use cases:
+
+- OCR/DICOM dependencies;
+- distribution to another server;
+- reproducible extraction workers.
+
+Acceptance:
+
+- Docker does not require `hermes` to be in the Docker group;
+- real data remains mounted from `/srv/hermes-medical/data`;
+- docs clearly distinguish Docker packaging from live non-Docker MVP.
+
+### 22. Background extraction worker
+
+Status: Later
+
+Separate long-running or scheduled worker for OCR/text extraction.
+
+Acceptance:
+
+- gateway remains responsive;
+- extraction jobs are idempotent;
+- failed extraction can be retried.
+
+## GitHub project hygiene
+
+### 23. GitHub Issues for roadmap items
+
+Status: Next
+
+Convert roadmap sections into GitHub issues when work begins.
+
+Suggested labels:
+
+```text
+area:telegram
+area:vault
+area:search
+area:memory
+area:database
+area:security
+area:ops
+priority:now
+priority:next
+priority:later
+```
+
+### 24. CI checks
+
+Status: Next
+
+Add GitHub Actions for:
+
+```text
+pytest
+ruff
+secret scanning sanity checks
+no-large-files check
+```
+
+Acceptance:
+
+- PR cannot accidentally add obvious secrets;
+- tests run on every PR.
