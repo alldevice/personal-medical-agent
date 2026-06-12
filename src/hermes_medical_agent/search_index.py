@@ -320,10 +320,36 @@ def _read_optional_text(path_value: str | None) -> str:
 
 
 def _make_fts_query(query: str) -> str:
-    # Build a conservative AND query from words. This avoids exposing raw user
-    # punctuation to FTS5 syntax while still supporting Russian and English text.
-    tokens = re.findall(r"[0-9A-Za-zА-Яа-яЁё]+", query)
-    tokens = [token for token in tokens if token.strip()]
+    # Build a conservative AND query from words. SQLite FTS5 accepts bare
+    # sanitized prefix terms like "эрози*" and "гастр*". Avoid parenthesized
+    # OR groups here because some SQLite/FTS builds reject that syntax.
+    tokens = re.findall(r"[0-9A-Za-zА-Яа-яЁё]+", query.casefold())
+    tokens = [token[:64] for token in tokens if token.strip()]
     if not tokens:
         return ""
-    return " ".join(f'"{token[:64].replace(chr(34), chr(34) + chr(34))}"' for token in tokens[:16])
+
+    terms: list[str] = []
+    for token in tokens[:16]:
+        if len(token) >= 7:
+            stem = token[:-2]
+        elif len(token) >= 5:
+            stem = token[:-1]
+        else:
+            stem = token
+        terms.append(f"{_fts_term(stem)}*")
+
+    return " ".join(terms)
+
+
+def _fts_term(token: str) -> str:
+    # Tokens come from a strict alphanumeric/Cyrillic regex, so they can be used
+    # as bare FTS5 terms. Keep this helper separate to make future escaping rules
+    # explicit if query syntax expands.
+    return token
+
+
+def _fts_term(token: str) -> str:
+    # Tokens come from a strict alphanumeric/Cyrillic regex, so they can be used
+    # as bare FTS5 terms. Keep this helper separate to make future escaping rules
+    # explicit if query syntax expands.
+    return token
