@@ -15,19 +15,25 @@ Research  needs investigation before implementation
 
 ### 1. End-to-end Telegram attachment ingest
 
-Status: Now
+Status: Partially implemented; Now for final Telegram UX.
 
 Goal: send a PDF/photo to the dedicated medical Telegram bot and have it stored automatically in the local vault.
 
-Acceptance:
+Implemented:
 
-- Telegram attachment is saved to a local temporary path.
-- `medical-agent ingest` is called automatically.
-- Original file is stored under `/srv/hermes-medical/data/raw/YYYY/MM/DD/`.
-- SQLite row is created.
-- Timeline item is created.
+- Hermes Telegram gateway caches supported inbound attachments under the medical profile cache.
+- `medical-agent telegram-cache-ingest --once` imports supported cached documents/images into the medical vault.
+- Imported originals are stored under `/srv/hermes-medical/data/raw/YYYY/MM/DD/`.
+- SQLite document rows and timeline items are created for imported files.
+- Text/OCR extraction and SQLite FTS indexing run after ingest.
+- Duplicate SHA/cache-path handling prevents repeated ingest of the same cached file.
+
+Remaining acceptance:
+
+- Ingest is triggered automatically after new Telegram attachments, not only by a manual/runbook scan.
 - Telegram reply includes document id, type/date if known, and SHA-256 prefix.
-- Temporary files are cleaned up.
+- Caption/type/date/comment metadata is parsed more accurately from Russian and English captions.
+- Cache cleanup policy is explicit: Hermes cache may be temporary; `/srv/hermes-medical/data/raw` remains the medical source of truth.
 
 ### 2. Better caption parser
 
@@ -134,6 +140,7 @@ Implementation note: basic CLI commands now exist:
 - `medical-agent index --all`
 - `medical-agent search <query>`
 - `medical-agent summary <topic>`
+- `medical-agent telegram-cache-ingest --once`
 
 Remaining work: expose safe Telegram commands, improve OCR quality reporting, and add medical event normalization before correlation-style assistance.
 
@@ -452,7 +459,3 @@ Acceptance:
 
 - PR cannot accidentally add obvious secrets;
 - tests run on every PR.
-
-- Telegram attachment ingest:
-  - Implemented first safe layer: medical-agent telegram-cache-ingest --once imports files already cached by Hermes Telegram gateway into the medical vault and FTS index.
-  - Remaining: direct Telegram reply with document id/type/date/SHA after ingest.
