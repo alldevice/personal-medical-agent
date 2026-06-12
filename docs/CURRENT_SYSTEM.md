@@ -168,12 +168,37 @@ The bot may ask for home channel setup. Use:
 /sethome
 ```
 
+## Honcho conversational memory
+
+Honcho conversational memory is live for the `medical_consultant` Telegram profile.
+
+Runtime identity:
+
+```text
+workspace: hermes_medical_consultant
+host key: hermes.medical_consultant
+canonical Human peer: human_sergei
+Telegram runtime alias: 237187787 -> human_sergei
+agent peer: hermes_medical_consultant
+pinPeerName: false
+```
+
+Scope:
+
+- Honcho is used for conversational/context memory only.
+- Honcho can remember stable communication preferences, answer style, workflow preferences, and doctor-preparation style.
+- Honcho is not the medical source of truth.
+- Medical facts must remain grounded in `/srv/hermes-medical/data/raw`, `/srv/hermes-medical/data/db/medical.sqlite`, timeline entries, extracted working copies, or explicit current user messages.
+- If a medical claim comes only from Honcho memory, the assistant must label it as conversation memory and not document-confirmed.
+
+Historical note: early pre-alias Honcho rows may contain peer `237187787`. New medical traffic after the alias repair should use `human_sergei`.
+
 ## Current limitations
 
 - Telegram attachment-to-vault ingest is not yet fully automated end-to-end.
 - Raw files and SQLite exist locally; text extraction/OCR is future work.
 - Search over stored content is not yet implemented.
-- Honcho memory is not yet integrated.
+- Honcho conversational memory is integrated, but only as non-authoritative conversation/context memory.
 - Multi-user mode is not yet implemented.
 - Postgres is not yet used; SQLite is the current database.
 - Docker is intentionally not in the primary MVP path.

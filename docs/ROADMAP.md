@@ -209,11 +209,11 @@ Acceptance:
 
 ## Memory and personalization
 
-### 12. Honcho memory integration
+### 12. Honcho conversational memory integration
 
-Status: Research
+Status: Live for basic conversational memory; Research/Next for deeper retrieval and automation.
 
-Use Honcho for interaction memory and preference memory, not as the medical source of truth.
+Honcho is now used for interaction memory and preference memory, not as the medical source of truth.
 
 Good candidates for Honcho:
 
@@ -223,6 +223,7 @@ language preference
 known communication constraints
 user preference for calm concise answers
 recurring doctor-preparation style
+document-batch workflow preferences
 ```
 
 Not for Honcho:
@@ -232,13 +233,24 @@ raw medical documents
 lab values as authoritative facts
 medical images
 full clinical records
+diagnoses or prescriptions as confirmed facts
+urgent safety decisions
 ```
 
-Acceptance:
+Live acceptance already verified:
+
+- medical Honcho workspace exists as `hermes_medical_consultant`;
+- Telegram runtime ID `237187787` is aliased to `human_sergei`;
+- agent peer is `hermes_medical_consultant`;
+- `honcho_profile peer=user` returns the `human_sergei` peer-card;
+- ordinary Telegram recall can remember conversational preferences;
+- recent Honcho messages use `human_sergei`, not raw `237187787`.
+
+Remaining acceptance for future work:
 
 - source medical facts remain in vault/SQLite;
 - Honcho memory can be rebuilt or ignored without data loss;
-- user can review/delete memory entries.
+- docs and runbook stay synchronized with runtime behavior;
 
 ### 13. Agent self-feedback / disagreement log
 

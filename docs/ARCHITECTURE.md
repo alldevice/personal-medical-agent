@@ -40,6 +40,27 @@ Telegram dedicated medical bot
 - Keep `/srv/hermes-medical/data/` local.
 - Keep `/home/hermes/.hermes/profiles/medical_consultant/.env` local.
 
+## Honcho conversational memory
+
+The live medical contour uses Honcho as a conversational memory layer, not as a clinical source-of-truth store.
+
+```text
+Telegram medical bot
+  -> Hermes profile: medical_consultant
+  -> Honcho workspace: hermes_medical_consultant
+  -> Human peer alias: 237187787 -> human_sergei
+  -> Agent peer: hermes_medical_consultant
+```
+
+Honcho may hold durable interaction memory:
+
+- answer style and language preferences;
+- user workflow preferences;
+- doctor-preparation style;
+- non-authoritative conversation continuity.
+
+Honcho must not be used as authoritative storage for raw medical files, lab values, prescriptions, diagnoses, images, or clinical records. Those remain in the local vault and SQLite/extracted-data layers.
+
 ## Future Docker mode
 
 Docker can be reintroduced later as a packaging/distribution mode. It is intentionally not the primary MVP path.

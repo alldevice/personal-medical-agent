@@ -209,6 +209,56 @@ If Telegram says no home channel is set, send:
 /sethome
 ```
 
+## 12.1 Honcho conversational memory verification
+
+Honcho is used only for conversational/context memory. It is not a medical source of truth.
+
+Expected host-level config in `/home/hermes/.hermes/honcho.json`:
+
+```json
+{
+  "hosts": {
+    "hermes.medical_consultant": {
+      "enabled": true,
+      "aiPeer": "hermes_medical_consultant",
+      "peerName": "human_sergei",
+      "workspace": "hermes_medical_consultant",
+      "pinPeerName": false,
+      "userPeerAliases": {
+        "237187787": "human_sergei"
+      }
+    }
+  }
+}
+```
+
+Verification commands:
+
+```bash
+curl -sS "http://127.0.0.1:8011/v3/workspaces/hermes_medical_consultant/peers/hermes_medical_consultant/card?target=human_sergei" | python3 -m json.tool
+
+sudo docker exec -i honcho-hermes-postgres psql -U postgres -d postgres -c "
+select peer_name, count(*) as messages, max(created_at) as last_msg
+from public.messages
+where workspace_name = 'hermes_medical_consultant'
+  and created_at >= now() - interval '60 minutes'
+group by peer_name
+order by peer_name;
+"
+```
+
+Expected after a Telegram smoke test: recent rows should use `human_sergei` and `hermes_medical_consultant`, not raw `237187787`.
+
+Telegram smoke prompts:
+
+```text
+honcho_profile peer=user
+```
+
+```text
+Скажи коротко: что ты помнишь обо мне из разговорной памяти, и является ли это медицинским источником правды?
+```
+
 ## 13. Acceptance checklist
 
 - `/home/hermes/.hermes/profiles/medical_consultant` exists.
@@ -218,3 +268,4 @@ If Telegram says no home channel is set, send:
 - `medical-agent timeline --limit 5` works as `hermes`.
 - `hermes gateway list` shows both `kanban_operator` and `medical_consultant` running.
 - Telegram bot answers as `medical_consultant`.
+- Honcho medical workspace uses `human_sergei` for the Telegram user alias and does not write new user messages as raw `237187787`.
