@@ -35,6 +35,30 @@ Telegram dedicated medical bot
 - `hermes`: owns `/srv/hermes-medical/repo`, `/srv/hermes-medical/data`, `/srv/hermes-medical/config`, and `/home/hermes/.hermes/profiles/medical_consultant`.
 - `hermes` should not be added to the Docker group for this MVP.
 
+## Telegram access-control boundary
+
+The dedicated medical Telegram bot is a sensitive runtime boundary because it can reach the personal medical archive, timeline, search context, and conversational memory. The bot username or link must never be treated as a secret.
+
+Every deployment must restrict inbound Telegram access with an explicit owner/user allowlist in the profile environment file:
+
+```text
+/home/hermes/.hermes/profiles/medical_consultant/.env
+```
+
+Required shape:
+
+```text
+TELEGRAM_BOT_TOKEN=<medical bot token>
+TELEGRAM_ALLOWED_USERS=XXX
+HERMES_MEDICAL_PROFILE=medical_consultant
+```
+
+`XXX` is the numeric Telegram user id of the deployment owner or another explicitly authorized user. Do not commit real production user ids to this repository.
+
+Runtime rule: do not run `hermes-medical-consultant-gateway.service` without `TELEGRAM_ALLOWED_USERS`. Before public release, verify from a second Telegram account that an unauthorized user cannot reach the medical assistant or receive useful responses.
+
+See `docs/SECURITY.md` for the full Telegram allowlist checklist and incident response rule.
+
 ## Data boundaries
 
 - Never commit real medical data.
@@ -51,7 +75,7 @@ The live medical contour uses Honcho as a conversational memory layer, not as a 
 Telegram medical bot
   -> Hermes profile: medical_consultant
   -> Honcho workspace: hermes_medical_consultant
-  -> Human peer alias: 237187787 -> human_sergei
+  -> Human peer alias: XXX -> human_sergei
   -> Agent peer: hermes_medical_consultant
 ```
 
