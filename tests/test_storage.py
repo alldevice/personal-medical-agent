@@ -53,3 +53,39 @@ def test_store_bytes_reuses_existing_document_for_same_sha(tmp_path: Path) -> No
     assert timeline_rows[1][0] == "duplicate_document_received"
     assert timeline_rows[1][1] == "annotated image"
     assert timeline_rows[1][2] == "second ingest metadata only"
+
+
+def test_init_adds_document_role_columns_to_existing_database(tmp_path: Path) -> None:
+    db_path = tmp_path / "data" / "db" / "medical.sqlite"
+    db_path.parent.mkdir(parents=True)
+    with sqlite3.connect(db_path) as con:
+        con.execute(
+            """
+            CREATE TABLE documents (
+                id TEXT PRIMARY KEY,
+                telegram_user_id INTEGER NOT NULL,
+                telegram_message_id INTEGER NOT NULL,
+                original_filename TEXT,
+                stored_path TEXT NOT NULL,
+                sha256 TEXT NOT NULL,
+                mime_type TEXT,
+                document_type TEXT,
+                document_date TEXT,
+                user_comment TEXT,
+                received_at TEXT NOT NULL,
+                processing_status TEXT NOT NULL,
+                extracted_text_path TEXT,
+                summary TEXT,
+                confidence REAL
+            )
+            """
+        )
+
+    store = MedicalStore(tmp_path / "data", db_path)
+    store.init()
+
+    with sqlite3.connect(db_path) as con:
+        columns = {row[1] for row in con.execute("PRAGMA table_info(documents)")}
+
+    assert "document_role" in columns
+    assert "role_note" in columns

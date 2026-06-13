@@ -28,7 +28,40 @@ Key fields:
 - document_type
 - document_date
 - user_comment
+- document_role
+- role_note
 - processing_status
+
+### Document role metadata
+
+`documents.document_role` is the operational classification used to keep
+doctor-facing summaries from mixing source results with noisy supporting papers.
+It does not change the immutable source file and it must not be used to delete
+or hide originals.
+
+Current role values:
+
+- `clinical_source` — primary clinical source: lab result, imaging conclusion,
+  endoscopy report, ECG/functional result, specialist examination, or other
+  clinically meaningful conclusion.
+- `treatment_order` — prescription or medication/treatment order.
+- `referral_order` — referral/order for a future test or procedure; useful for
+  planning, but not itself a result.
+- `administrative_supporting` — contract, payment/order confirmation,
+  registration paper, certificate, or other administrative proof.
+- `supporting_context` — screenshot/photo/context item that helps explain the
+  care pathway but does not replace an official result or referral.
+- `auxiliary_context` — wellness/fitness/background data that may be useful as
+  context but is not a clinical diagnosis.
+- `patient_self_report` — patient-provided facts without an attached verifying
+  clinical document.
+- `container_bundle` — technical archive/container kept as original source when
+  its clinically relevant members are represented as separate document rows.
+
+`documents.role_note` stores a short human-readable reason for the assigned
+role. Reports should group or filter by `document_role`: clinical sources first,
+then treatment/referral orders, then administrative/supporting/context records,
+with patient self-reports clearly separated.
 
 ## timeline_items
 
@@ -60,6 +93,7 @@ Examples:
 Representation:
 
 - `documents.document_type` should start with `самоотчёт пациента:` followed by the topic.
+- `documents.document_role` should be `patient_self_report`.
 - `documents.user_comment` and `timeline_items.body` should start with `Со слов пациента:`.
 - `timeline_items.confidence` should not imply external verification unless a clinician/source document confirms it.
 - Uncertainty must be stored explicitly in the text, e.g. `вероятно`, `точный препарат не подтверждён`, `примерно`, `пациент не помнит`.

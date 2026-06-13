@@ -31,7 +31,7 @@ docs/current-system-refresh
 ## Preferred workflow
 
 1. Decide the change in conversation or issue.
-2. Update docs first when architecture or operations change.
+2. Update docs first when architecture, operations, or data-model metadata change.
 3. Implement code changes in a branch.
 4. Run tests locally or in CI.
 5. Open a pull request.
@@ -50,7 +50,7 @@ Suggested PR checklist:
 ```text
 - [ ] No real medical data committed.
 - [ ] No tokens, API keys, OAuth files, or Telegram credentials committed.
-- [ ] README/docs updated if behavior changed.
+- [ ] README/docs updated if behavior or data-model metadata changed.
 - [ ] Runbook updated if deployment changed.
 - [ ] Tests added or updated for code behavior.
 - [ ] Server update command is clear.
@@ -132,6 +132,7 @@ A change is done only when:
 
 - code is in GitHub;
 - docs match the live behavior;
+- data-model docs match any live SQLite schema/metadata changes;
 - server is updated from GitHub, not manually diverged;
 - `medical-agent timeline --limit 5` works;
 - `hermes gateway list` shows `medical_consultant` running;

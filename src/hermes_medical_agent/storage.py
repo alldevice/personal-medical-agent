@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS documents (
     document_type TEXT,
     document_date TEXT,
     user_comment TEXT,
+    document_role TEXT,
+    role_note TEXT,
     received_at TEXT NOT NULL,
     processing_status TEXT NOT NULL,
     extracted_text_path TEXT,
@@ -85,6 +87,19 @@ class MedicalStore:
             path.mkdir(parents=True, exist_ok=True)
         with sqlite3.connect(self.db_path) as con:
             con.executescript(SCHEMA)
+            self._ensure_schema_columns(con)
+
+    def _ensure_schema_columns(self, con: sqlite3.Connection) -> None:
+        """Apply lightweight SQLite migrations for existing vault databases."""
+
+        document_columns = {
+            str(row[1])
+            for row in con.execute("PRAGMA table_info(documents)").fetchall()
+        }
+        if "document_role" not in document_columns:
+            con.execute("ALTER TABLE documents ADD COLUMN document_role TEXT")
+        if "role_note" not in document_columns:
+            con.execute("ALTER TABLE documents ADD COLUMN role_note TEXT")
 
     def store_bytes(self, content: bytes, filename: str | None) -> StoredDocument:
         sha256 = hashlib.sha256(content).hexdigest()
@@ -112,7 +127,8 @@ class MedicalStore:
             row = con.execute(
                 """
                 SELECT id, original_filename, stored_path, sha256, mime_type,
-                       document_type, document_date, user_comment, processing_status
+                       document_type, document_date, user_comment,
+                       document_role, role_note, processing_status
                 FROM documents
                 WHERE sha256 = ?
                 ORDER BY received_at ASC
@@ -223,7 +239,8 @@ class MedicalStore:
             rows = con.execute(
                 """
                 SELECT id, original_filename, stored_path, sha256, mime_type,
-                       document_type, document_date, user_comment, processing_status
+                       document_type, document_date, user_comment,
+                       document_role, role_note, processing_status
                 FROM documents
                 ORDER BY received_at ASC
                 """
@@ -236,7 +253,8 @@ class MedicalStore:
             row = con.execute(
                 """
                 SELECT id, original_filename, stored_path, sha256, mime_type,
-                       document_type, document_date, user_comment, processing_status
+                       document_type, document_date, user_comment,
+                       document_role, role_note, processing_status
                 FROM documents
                 WHERE id = ?
                 """,
