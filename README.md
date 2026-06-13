@@ -1,12 +1,28 @@
-# Personal Medical Agent for Hermes
+# Personal Medical Agent
 
-Telegram-first personal medical archive and retrieval workflow implemented as a **Hermes profile + local vault + small CLI tools**.
+A **self-hosted, privacy-first personal medical archive assistant** built around a local vault, source-linked retrieval, a dedicated Hermes profile, and a Telegram-first user interface.
 
-This repository is the source of truth for the personal medical consultant system: current live state, installation history, operations, change management, and roadmap.
+The project is designed for people who want to keep their own medical documents under their control while still being able to ask an AI assistant to find, summarize, and prepare source-linked context from their personal health archive.
 
-## Current live MVP
+> **Safety notice:** this is a personal archive and assistant, not a medical device. It does not diagnose, prescribe, cancel medication, or replace licensed medical care. Answers must distinguish source facts from model interpretation.
 
-The MVP does **not** run its own Docker container. It uses the existing Hermes runtime/provider credentials and a separate Telegram bot token for the dedicated `medical_consultant` gateway.
+## What it does
+
+- Stores original medical files in a local vault, outside Git.
+- Calculates SHA-256 for stored source files.
+- Keeps a SQLite index and a chronological timeline.
+- Classifies document rows with `document_role` and `role_note` so doctor-facing outputs can separate clinical sources from prescriptions, referrals, administrative/supporting records, context items, self-reports, and technical containers.
+- Extracts text from documents and keeps extracted working copies separate from originals.
+- Supports source-linked search and summary through the `medical-agent` CLI.
+- Uses a dedicated Hermes profile named `medical_consultant`.
+- Uses a dedicated Telegram bot/gateway for the medical assistant contour.
+- Uses Honcho only for conversational and preference memory, not as the medical source of truth.
+
+## Current project status
+
+This repository is an early public-release candidate for a working personal MVP.
+
+The current live MVP uses:
 
 ```text
 Telegram dedicated medical bot
@@ -17,89 +33,188 @@ Telegram dedicated medical bot
   -> SQLite: /srv/hermes-medical/data/db/medical.sqlite
 ```
 
-Server layout:
+The primary deployment path currently assumes an existing Hermes runtime. A standalone or Docker-based distribution mode is planned later; it is not the primary MVP path yet.
 
-```text
-/srv/hermes-medical/
-  repo/       # git clone of this repository
-  data/       # real medical vault, never Git
-  config/     # local medical settings, never Git
+## Architecture at a glance
+
+```mermaid
+flowchart TD
+    user[User] --> ui[Telegram bot / future CLI / future Web UI]
+    ui --> gateway[Dedicated Hermes gateway]
+    gateway --> profile[Hermes profile: medical_consultant]
+
+    profile --> safety[Safety and source-of-truth policy]
+    profile --> cli[medical-agent CLI]
+    profile --> memory[Honcho conversational memory]
+    profile --> model[LLM provider]
+
+    cli --> ingest[Ingest]
+    cli --> extract[Text extraction / OCR hook]
+    cli --> index[SQLite FTS index]
+    cli --> timeline[Chronological timeline]
+
+    ingest --> vault[Local vault: raw originals]
+    extract --> extracted[Extracted working copies]
+    index --> db[(SQLite database)]
+    timeline --> db
+
+    vault --> sources[Authoritative source facts]
+    extracted --> retrieval[Source-linked retrieval]
+    db --> retrieval
+    retrieval --> profile
+
+    memory -. preferences only .-> profile
+    memory -. not medical source of truth .-> safety
 ```
 
-Live Hermes profile:
+The important boundary is simple: **medical facts live in the local vault, SQLite, timeline, extracted working copies, or explicit current user messages. Honcho memory may help with continuity and preferences, but it must not become the authoritative medical record.**
 
-```text
-/home/hermes/.hermes/profiles/medical_consultant
+## Roadmap at a glance
+
+```mermaid
+flowchart LR
+    subgraph done[Done / live MVP]
+        d1[Dedicated medical Hermes profile]
+        d2[Dedicated Telegram gateway]
+        d3[Local vault and SQLite]
+        d4[Document ingest]
+        d5[Extracted working copies]
+        d6[Basic OCR/text extraction]
+        d7[SQLite FTS search]
+        d8[Honcho conversational memory]
+    end
+
+    subgraph now[Now]
+        n1[Improve Telegram attachment metadata]
+        n2[Better caption parser]
+        n3[Document listing and conservative deletion]
+        n4[Backup and restore runbook]
+    end
+
+    subgraph next[Next]
+        x1[Telegram search and summary commands]
+        x2[Timeline normalization]
+        x3[Audit log]
+        x4[GitHub CI and secret checks]
+    end
+
+    subgraph later[Later]
+        l1[Structured lab results]
+        l2[Medication and allergy list]
+        l3[Doctor visit preparation packets]
+        l4[Optional Docker packaging]
+        l5[Multi-user and caregiver mode]
+        l6[Encryption-at-rest research]
+    end
+
+    done --> now --> next --> later
 ```
 
-Live gateway service:
+The detailed roadmap is maintained in [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
-```text
-/etc/systemd/system/hermes-medical-consultant-gateway.service
+## Quick start: current MVP path
+
+This path is intended for a technical user with an Ubuntu server and an existing Hermes runtime.
+
+### 1. Prepare directories
+
+```bash
+sudo install -d -m 755 -o root -g root /srv/hermes-medical
+sudo install -d -m 750 -o hermes -g hermes /srv/hermes-medical/repo
+sudo install -d -m 700 -o hermes -g hermes /srv/hermes-medical/data
+sudo install -d -m 700 -o hermes -g hermes /srv/hermes-medical/config
 ```
+
+### 2. Clone the repository
+
+```bash
+sudo -u hermes -H git clone https://github.com/alldevice/personal-medical-agent.git /srv/hermes-medical/repo
+sudo -u hermes -H git -C /srv/hermes-medical/repo status --short
+```
+
+### 3. Create local config
+
+```bash
+sudo -u hermes -H cp /srv/hermes-medical/repo/config/.env.example /srv/hermes-medical/config/.env
+sudo chmod 600 /srv/hermes-medical/config/.env
+```
+
+Store real Telegram tokens and provider credentials only on the server. Do not commit them.
+
+### 4. Install the CLI
+
+```bash
+sudo -u hermes -H python3 -m venv /srv/hermes-medical/repo/.venv
+sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/python -m pip install --upgrade pip
+sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/pip install -e /srv/hermes-medical/repo
+sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent init
+```
+
+### 5. Run a smoke test
+
+```bash
+sudo -u hermes -H bash -lc 'echo "synthetic test document" > /tmp/medical-test.txt'
+sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent ingest \
+  --file /tmp/medical-test.txt \
+  --type "test-document" \
+  --date "2026-06-12" \
+  --comment "MVP smoke test"
+sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent timeline --limit 5
+sudo -u hermes -H rm -f /tmp/medical-test.txt
+```
+
+For the full installation flow, read [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
 
 ## Documentation map
 
-Read these files first:
+Read these first:
 
+- [`docs/LLM_CONTEXT.md`](docs/LLM_CONTEXT.md) — compact context for ChatGPT/LLM agents entering the repository.
 - [`docs/CURRENT_SYSTEM.md`](docs/CURRENT_SYSTEM.md) — current live system source of truth.
 - [`docs/RUNBOOK.md`](docs/RUNBOOK.md) — installation and verification runbook.
 - [`docs/OPERATIONS.md`](docs/OPERATIONS.md) — daily operations, restart, health checks, troubleshooting.
-- [`docs/CHANGE_MANAGEMENT.md`](docs/CHANGE_MANAGEMENT.md) — how to change the system using branches, PRs, Git pull, and server updates.
-- [`docs/ROADMAP.md`](docs/ROADMAP.md) — planned future work.
-- [`docs/INSTALLATION_HISTORY.md`](docs/INSTALLATION_HISTORY.md) — what was done during the initial MVP setup.
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — architecture overview.
+- [`docs/CHANGE_MANAGEMENT.md`](docs/CHANGE_MANAGEMENT.md) — branches, pull requests, Git pull, and server updates.
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — detailed future work.
+- [`docs/INSTALLATION_HISTORY.md`](docs/INSTALLATION_HISTORY.md) — initial MVP setup history.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — architecture details.
 - [`docs/SAFETY_POLICY.md`](docs/SAFETY_POLICY.md) — medical safety boundary.
 - [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md) — current data model notes.
 
-## MVP goals
+## For ChatGPT and other LLM agents
 
-- Keep a dedicated Hermes profile named `medical_consultant`.
-- Run it through a dedicated Telegram bot/gateway so it does not conflict with `kanban_operator`.
-- Store original medical files under `/srv/hermes-medical/data/raw/`.
-- Calculate SHA-256 for every stored source file.
-- Keep a SQLite index at `/srv/hermes-medical/data/db/medical.sqlite`.
-- Classify document rows with `document_role`/`role_note` so doctor-facing
-  outputs can separate clinical sources from prescriptions, referrals,
-  administrative/supporting records, context items, self-reports, and technical
-  containers.
-- Build a simple chronological medical timeline.
-- Let the Hermes profile answer via Telegram using the local vault as source material.
-- Keep real medical data, tokens, OAuth state and provider credentials outside Git.
+The README is intentionally human-friendly. It should not replace the operational source-of-truth documents.
 
-## Server ownership model
+When an LLM is asked to inspect or continue work in this repository, it should read:
 
-Recommended users:
+1. [`docs/LLM_CONTEXT.md`](docs/LLM_CONTEXT.md)
+2. [`docs/CURRENT_SYSTEM.md`](docs/CURRENT_SYSTEM.md)
+3. [`docs/ROADMAP.md`](docs/ROADMAP.md)
+4. [`docs/RUNBOOK.md`](docs/RUNBOOK.md)
+5. [`docs/CHANGE_MANAGEMENT.md`](docs/CHANGE_MANAGEMENT.md)
 
-```text
-aiadmin/root:
-  system setup, apt packages, permissions, systemd if needed
+This keeps the project understandable for new humans while preserving a precise entry point for AI-assisted maintenance.
 
-hermes:
-  owns /srv/hermes-medical/repo
-  owns /srv/hermes-medical/data
-  owns /srv/hermes-medical/config
-  owns /home/hermes/.hermes/profiles/medical_consultant
-  runs the medical CLI from the Hermes profile
-```
+## Safety and privacy boundaries
 
-Do not add `hermes` to the Docker group for this MVP.
-
-## Quick health check
-
-```bash
-cd /
-systemctl status hermes-medical-consultant-gateway.service --no-pager -l
-sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent timeline --limit 5
-sudo -u hermes -H bash -lc 'export HOME=/home/hermes; export PATH=/home/hermes/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; /home/hermes/.local/bin/hermes gateway list'
-```
-
-Expected:
+Never commit:
 
 ```text
-kanban_operator       running
-medical_consultant    running
+/srv/hermes-medical/data/**
+/srv/hermes-medical/config/.env
+/home/hermes/.hermes/profiles/medical_consultant/.env
+/home/hermes/.hermes/profiles/medical_consultant/auth.json
+/home/hermes/.hermes/.env
+/home/hermes/.hermes/auth.json
 ```
+
+Before making this repository public, perform a manual audit for:
+
+- real medical data;
+- Telegram tokens;
+- provider/API credentials;
+- OAuth state files;
+- private hostnames or secrets;
+- accidental logs or screenshots containing sensitive data.
 
 ## Normal update from GitHub to server
 
@@ -115,17 +230,6 @@ sudo systemctl restart hermes-medical-consultant-gateway.service
 systemctl status hermes-medical-consultant-gateway.service --no-pager -l
 ```
 
-## Safety boundary
+## License
 
-This system is a personal archive and assistant. It does not diagnose, prescribe, cancel medication, or replace medical care. Answers must distinguish source facts from model interpretation.
-
-## Never commit
-
-```text
-/srv/hermes-medical/data/**
-/srv/hermes-medical/config/.env
-/home/hermes/.hermes/profiles/medical_consultant/.env
-/home/hermes/.hermes/profiles/medical_consultant/auth.json
-/home/hermes/.hermes/.env
-/home/hermes/.hermes/auth.json
-```
+A license should be selected before public release. Until then, treat the project as source-available for review by the repository owner and explicitly authorized collaborators only.
