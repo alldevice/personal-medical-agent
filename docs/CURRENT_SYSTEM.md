@@ -1,6 +1,6 @@
 # Current live system
 
-Last verified manually: 2026-06-12.
+Last verified manually: 2026-06-13.
 
 This document describes the live system as it actually exists on `ai-server`. It is the source of truth for the current MVP state.
 
@@ -117,6 +117,22 @@ SQLite database:
 /srv/hermes-medical/data/db/medical.sqlite
 ```
 
+Current `documents` metadata includes document-role classification fields:
+
+```text
+document_role
+role_note
+```
+
+The role layer is used to reduce noisy doctor-facing reports without deleting
+or rewriting originals. Current roles are: `clinical_source`,
+`treatment_order`, `referral_order`, `administrative_supporting`,
+`supporting_context`, `auxiliary_context`, `patient_self_report`, and
+`container_bundle`.
+
+Run `medical-agent init` after pulling schema changes; it applies lightweight
+SQLite migrations for existing vault databases.
+
 ## Runtime users
 
 ```text
@@ -200,7 +216,8 @@ Historical note: early pre-alias Honcho rows may contain peer `237187787`. New m
 ## Current limitations
 
 - Telegram attachment-to-vault ingest is not yet fully automated end-to-end.
-- Basic extracted working copies, text extraction, OCR hook, and SQLite FTS search now exist as CLI capabilities.
+- Basic extracted working copies, text extraction, OCR hook, SQLite FTS search,
+  and document-role metadata now exist as CLI/data-layer capabilities.
 - Telegram commands for search/summary and deeper medical comparison workflows are not yet integrated into the live bot.
 - Honcho conversational memory is integrated, but only as non-authoritative conversation/context memory.
 - Multi-user mode is not yet implemented.

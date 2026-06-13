@@ -59,6 +59,10 @@ Read these files first:
 - Store original medical files under `/srv/hermes-medical/data/raw/`.
 - Calculate SHA-256 for every stored source file.
 - Keep a SQLite index at `/srv/hermes-medical/data/db/medical.sqlite`.
+- Classify document rows with `document_role`/`role_note` so doctor-facing
+  outputs can separate clinical sources from prescriptions, referrals,
+  administrative/supporting records, context items, self-reports, and technical
+  containers.
 - Build a simple chronological medical timeline.
 - Let the Hermes profile answer via Telegram using the local vault as source material.
 - Keep real medical data, tokens, OAuth state and provider credentials outside Git.

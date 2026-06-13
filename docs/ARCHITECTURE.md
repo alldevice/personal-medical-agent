@@ -23,6 +23,9 @@ Telegram dedicated medical bot
 - Medical store: filesystem vault plus SQLite index.
 - Raw storage: original PDFs/images/DICOM/ECG files kept unchanged.
 - Timeline: chronological source-linked medical events.
+- Document roles: SQLite metadata used to distinguish primary clinical sources,
+  treatment/referral orders, administrative/supporting records, context items,
+  patient self-reports, and technical containers.
 - Future extraction: PDF text, OCR, DICOM metadata, ECG raw signal parsing.
 - Future retrieval: SQLite FTS and optional vector index/Honcho integration.
 
