@@ -33,6 +33,13 @@ CREATE VIRTUAL TABLE IF NOT EXISTS medical_search_fts USING fts5(
 
 TEXT_SUFFIXES = {".txt", ".md", ".csv", ".json", ".xml", ".html", ".htm"}
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
+RUSSIAN_SEARCH_SUFFIXES = (
+    "ыми", "ими", "ого", "его", "ому", "ему",
+    "ая", "яя", "ой", "ей", "ое", "ее", "ые", "ие",
+    "ам", "ям", "ах", "ях", "ом", "ем", "ою", "ею",
+    "а", "я", "ы", "и", "о", "е", "у", "ю",
+)
+
 
 
 @dataclass(frozen=True)
@@ -345,24 +352,27 @@ def _read_optional_text(path_value: str | None) -> str:
 
 def _make_fts_query(query: str) -> str:
     # Build a conservative AND query from words. SQLite FTS5 accepts bare
-    # sanitized prefix terms like "эрози*" and "гастр*". Avoid parenthesized
-    # OR groups here because some SQLite/FTS builds reject that syntax.
+    # sanitized prefix terms. For Russian words, strip common endings first so
+    # queries like "скорая помощь" can match text containing "скорой помощи".
     tokens = re.findall(r"[0-9A-Za-zА-Яа-яЁё]+", query.casefold())
     tokens = [token[:64] for token in tokens if token.strip()]
     if not tokens:
         return ""
 
-    terms: list[str] = []
-    for token in tokens[:16]:
-        if len(token) >= 7:
-            stem = token[:-2]
-        elif len(token) >= 5:
-            stem = token[:-1]
-        else:
-            stem = token
-        terms.append(f"{_fts_term(stem)}*")
+    terms = [f"{_fts_term(_stem_search_token(token))}*" for token in tokens[:16]]
+    return " ".join(term for term in terms if term != "*")
 
-    return " ".join(terms)
+
+def _stem_search_token(token: str) -> str:
+    if re.fullmatch(r"[а-яё]+", token) and len(token) >= 5:
+        for suffix in RUSSIAN_SEARCH_SUFFIXES:
+            if token.endswith(suffix) and len(token) - len(suffix) >= 3:
+                return token[: -len(suffix)]
+    if len(token) >= 7:
+        return token[:-2]
+    if len(token) >= 5:
+        return token[:-1]
+    return token
 
 
 def _fts_term(token: str) -> str:
