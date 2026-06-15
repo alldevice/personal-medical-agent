@@ -116,7 +116,7 @@ def load_store() -> MedicalStore:
     return store
 
 
-def cmd_init() -> int:
+def cmd_init(args: argparse.Namespace | None = None) -> int:
     settings = load_settings()
     store = MedicalStore(settings.medical_data_dir, settings.medical_db_path)
     store.init()
