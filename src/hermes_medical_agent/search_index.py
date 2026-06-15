@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from hermes_medical_agent.body_parameters import ensure_body_parameter_schema, body_parameter_to_search_text
 from hermes_medical_agent.storage import MedicalStore, utc_now
 
 
@@ -47,6 +48,7 @@ class ExtractedTextResult:
 def ensure_search_schema(db_path: Path) -> None:
     with sqlite3.connect(db_path) as con:
         con.executescript(SEARCH_SCHEMA)
+    ensure_body_parameter_schema(db_path)
 
 
 def extract_text_for_document(
@@ -155,7 +157,7 @@ def extract_text_for_document(
 
 
 def rebuild_search_index(store: MedicalStore) -> int:
-    """Rebuild the SQLite FTS index from extracted text and timeline notes."""
+    """Rebuild the SQLite FTS index from extracted text, timeline notes, and body parameters."""
 
     ensure_search_schema(store.db_path)
 
@@ -221,6 +223,28 @@ def rebuild_search_index(store: MedicalStore) -> int:
                 VALUES (?, ?, ?, ?, ?)
                 """,
                 (document_id, "timeline_note", title, body, ""),
+            )
+            indexed += 1
+
+        body_parameters = con.execute(
+            """
+            SELECT id, document_id, timeline_item_id, observed_at,
+                   parameter_group, parameter_name, parameter_code, value_text,
+                   value_numeric, unit, reference_range, note, body_site,
+                   method, source_quote, confidence, verified_by_user, created_at
+            FROM body_parameters
+            ORDER BY observed_at ASC, created_at ASC
+            """
+        ).fetchall()
+
+        for row in body_parameters:
+            title, body = body_parameter_to_search_text(row)
+            con.execute(
+                """
+                INSERT INTO medical_search_fts(document_id, scope, title, body, text)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (row["document_id"] or "", "body_parameter", title, body, ""),
             )
             indexed += 1
 
@@ -339,13 +363,6 @@ def _make_fts_query(query: str) -> str:
         terms.append(f"{_fts_term(stem)}*")
 
     return " ".join(terms)
-
-
-def _fts_term(token: str) -> str:
-    # Tokens come from a strict alphanumeric/Cyrillic regex, so they can be used
-    # as bare FTS5 terms. Keep this helper separate to make future escaping rules
-    # explicit if query syntax expands.
-    return token
 
 
 def _fts_term(token: str) -> str:
