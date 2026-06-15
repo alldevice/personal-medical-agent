@@ -4,6 +4,12 @@ import argparse
 import mimetypes
 from pathlib import Path
 
+from hermes_medical_agent.body_parameters import (
+    add_body_parameter,
+    ensure_body_parameter_schema,
+    list_body_parameters,
+    search_body_parameters,
+)
 from hermes_medical_agent.content_audit import build_content_audit_report, render_content_audit_markdown, write_content_audit_report
 from hermes_medical_agent.parser import parse_caption
 from hermes_medical_agent.search_index import extract_text_for_document, rebuild_search_index, search_documents
@@ -68,6 +74,28 @@ def build_parser() -> argparse.ArgumentParser:
     add_timeline.add_argument("--confidence", type=float, default=0.5)
     add_timeline.add_argument("--verified", action="store_true")
 
+    add_param = sub.add_parser("add-body-parameter")
+    add_param.add_argument("--document-id", default=None)
+    add_param.add_argument("--timeline-item-id", default=None)
+    add_param.add_argument("--observed-at", required=True)
+    add_param.add_argument("--group", dest="parameter_group", default=None)
+    add_param.add_argument("--parameter", dest="parameter_name", required=True)
+    add_param.add_argument("--code", dest="parameter_code", default=None)
+    add_param.add_argument("--value", dest="value_text", default=None)
+    add_param.add_argument("--numeric-value", type=float, default=None)
+    add_param.add_argument("--unit", default=None)
+    add_param.add_argument("--reference-range", default=None)
+    add_param.add_argument("--note", default=None)
+    add_param.add_argument("--body-site", default=None)
+    add_param.add_argument("--method", default=None)
+    add_param.add_argument("--quote", dest="source_quote", default=None)
+    add_param.add_argument("--confidence", type=float, default=0.5)
+    add_param.add_argument("--verified", action="store_true")
+
+    body_parameters = sub.add_parser("body-parameters")
+    body_parameters.add_argument("--query", default=None)
+    body_parameters.add_argument("--limit", type=int, default=50)
+
     cache = sub.add_parser("telegram-cache-ingest")
     cache.add_argument("--cache-dir", action="append", default=[])
     cache.add_argument("--once", action="store_true")
@@ -84,6 +112,7 @@ def load_store() -> MedicalStore:
     settings = load_settings()
     store = MedicalStore(settings.medical_data_dir, settings.medical_db_path)
     store.init()
+    ensure_body_parameter_schema(store.db_path)
     return store
 
 
@@ -91,8 +120,10 @@ def cmd_init() -> int:
     settings = load_settings()
     store = MedicalStore(settings.medical_data_dir, settings.medical_db_path)
     store.init()
+    ensure_body_parameter_schema(store.db_path)
     print(f"initialized data_dir={settings.medical_data_dir}")
     print(f"initialized db={settings.medical_db_path}")
+    print("initialized body_parameters")
     return 0
 
 
@@ -250,6 +281,65 @@ def cmd_add_timeline(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_add_body_parameter(args: argparse.Namespace) -> int:
+    store = load_store()
+    parameter_id = add_body_parameter(
+        store,
+        document_id=args.document_id,
+        timeline_item_id=args.timeline_item_id,
+        observed_at=args.observed_at,
+        parameter_group=args.parameter_group,
+        parameter_name=args.parameter_name,
+        parameter_code=args.parameter_code,
+        value_text=args.value_text,
+        value_numeric=args.numeric_value,
+        unit=args.unit,
+        reference_range=args.reference_range,
+        note=args.note,
+        body_site=args.body_site,
+        method=args.method,
+        source_quote=args.source_quote,
+        confidence=args.confidence,
+        verified_by_user=1 if args.verified else 0,
+    )
+    rebuild_search_index(store)
+    print("added body parameter")
+    print(f"id={parameter_id}")
+    print(f"document_id={args.document_id or 'none'}")
+    print(f"timeline_item_id={args.timeline_item_id or 'none'}")
+    print(f"observed_at={args.observed_at}")
+    print(f"parameter={args.parameter_name}")
+    return 0
+
+
+def cmd_body_parameters(args: argparse.Namespace) -> int:
+    store = load_store()
+    rows = (
+        search_body_parameters(store, args.query, limit=args.limit)
+        if args.query
+        else list_body_parameters(store, limit=args.limit)
+    )
+    if not rows:
+        print("no body parameters")
+        return 0
+    for row in rows:
+        value = row.get("value_text") or ""
+        if row.get("value_numeric") is not None:
+            value = f"{row['value_numeric']:g} {row.get('unit') or ''}".strip()
+        print(
+            f"- {row.get('observed_at') or 'date unknown'} — "
+            f"{row.get('parameter_name') or 'parameter unknown'}"
+            + (f": {value}" if value else "")
+            + (f" [{row.get('parameter_group')}]" if row.get("parameter_group") else "")
+        )
+        print(f"  id={row.get('id')} document_id={row.get('document_id') or 'none'} timeline_item_id={row.get('timeline_item_id') or 'none'}")
+        if row.get("note"):
+            print(f"  note={row['note']}")
+        if row.get("source_quote"):
+            print(f"  source_quote={row['source_quote']}")
+    return 0
+
+
 def cmd_telegram_cache_ingest(args: argparse.Namespace) -> int:
     store = load_store()
     cache_dirs = [Path(path) for path in args.cache_dir] if args.cache_dir else default_cache_dirs()
@@ -288,9 +378,11 @@ def main() -> int:
         "content-audit": cmd_content_audit,
         "annotate-document": cmd_annotate_document,
         "add-timeline": cmd_add_timeline,
+        "add-body-parameter": cmd_add_body_parameter,
+        "body-parameters": cmd_body_parameters,
         "telegram-cache-ingest": cmd_telegram_cache_ingest,
     }
-    return handlers[args.command](args) if args.command != "init" else cmd_init()
+    return handlers[args.command](args)
 
 
 if __name__ == "__main__":
