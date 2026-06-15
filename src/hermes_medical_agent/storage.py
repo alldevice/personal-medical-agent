@@ -58,6 +58,9 @@ CREATE INDEX IF NOT EXISTS idx_documents_sha256 ON documents(sha256);
 CREATE INDEX IF NOT EXISTS idx_timeline_date ON timeline_items(event_date);
 """
 
+MAX_EXTRACTED_ARCHIVE_FILES = 1000
+MAX_NESTED_ARCHIVE_DEPTH = 5
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -228,6 +231,43 @@ class MedicalStore:
             confidence=0.5,
         )
 
+    def update_document_metadata(
+        self,
+        document_id: str,
+        *,
+        document_type: str | None = None,
+        document_role: str | None = None,
+        role_note: str | None = None,
+    ) -> dict[str, str | None]:
+        """Update semantic metadata for an existing source document.
+
+        This intentionally changes only metadata used for retrieval and reporting. The
+        immutable raw source file and extracted working copy are not modified.
+        """
+
+        self.get_document(document_id)
+        updates: list[str] = []
+        values: list[str] = []
+        if document_type is not None:
+            updates.append("document_type = ?")
+            values.append(document_type)
+        if document_role is not None:
+            updates.append("document_role = ?")
+            values.append(document_role)
+        if role_note is not None:
+            updates.append("role_note = ?")
+            values.append(role_note)
+        if not updates:
+            raise ValueError("at least one metadata field must be provided")
+
+        values.append(document_id)
+        with sqlite3.connect(self.db_path) as con:
+            con.execute(
+                f"UPDATE documents SET {', '.join(updates)} WHERE id = ?",
+                values,
+            )
+        return self.get_document(document_id)
+
     def _document_exists(self, document_id: str) -> bool:
         with sqlite3.connect(self.db_path) as con:
             row = con.execute("SELECT 1 FROM documents WHERE id = ?", (document_id,)).fetchone()
@@ -268,9 +308,9 @@ class MedicalStore:
         """Materialize a fast-access copy under data/extracted/<document_id>.
 
         The original stored_path remains the immutable source of truth in data/raw.
-        ZIP files are unpacked once; non-ZIP originals are copied once into the
-        extracted directory so later text/OCR/indexing jobs can work from a stable
-        per-document folder without touching the Telegram cache.
+        ZIP files are unpacked recursively into a stable per-document working folder;
+        non-ZIP originals are copied there too. Later text/OCR/indexing jobs work
+        from that folder without touching the Telegram cache or the raw original.
         """
 
         row = self.get_document(document_id)
@@ -283,36 +323,33 @@ class MedicalStore:
 
         written: list[str] = []
         skipped: list[str] = []
+        nested_archives: list[str] = []
         files_dir = target_dir / "files"
         files_dir.mkdir(parents=True, exist_ok=True)
+        state = {"next_index": 1, "materialized_files": 0}
 
         if zipfile.is_zipfile(source):
-            with zipfile.ZipFile(source) as archive:
-                for index, info in enumerate(archive.infolist(), start=1):
-                    if info.is_dir():
-                        continue
-                    original_name = info.filename
-                    relative = Path(original_name)
-                    if relative.is_absolute() or ".." in relative.parts:
-                        raise ValueError(f"unsafe ZIP member path: {original_name}")
-                    filename = self._extracted_filename(index, original_name)
-                    destination = files_dir / filename
-                    if destination.exists():
-                        skipped.append(original_name)
-                        continue
-                    with archive.open(info) as src, destination.open("wb") as dst:
-                        shutil.copyfileobj(src, dst)
-                    written.append(original_name)
+            self._extract_zip_archive(
+                source,
+                files_dir,
+                source_label=source.name,
+                depth=0,
+                state=state,
+                written=written,
+                skipped=skipped,
+                nested_archives=nested_archives,
+            )
         else:
-            filename = self._extracted_filename(1, source.name)
-            destination = files_dir / filename
-            if destination.exists():
-                skipped.append(source.name)
-            else:
-                shutil.copy2(source, destination)
-                written.append(source.name)
+            self._copy_extracted_source(
+                source,
+                files_dir,
+                state=state,
+                written=written,
+                skipped=skipped,
+            )
 
         manifest = {
+            "content_indexing_version": 2,
             "document_id": document_id,
             "original_filename": row.get("original_filename"),
             "stored_path": str(source),
@@ -320,6 +357,8 @@ class MedicalStore:
             "extracted_dir": str(target_dir),
             "written_files": written,
             "skipped_existing_files": skipped,
+            "nested_archives": nested_archives,
+            "materialized_files": state["materialized_files"],
             "updated_at": utc_now(),
         }
         (target_dir / "manifest.json").write_text(
@@ -332,6 +371,111 @@ class MedicalStore:
                 ("stored+extracted", document_id),
             )
         return manifest
+
+    def _extract_zip_archive(
+        self,
+        archive_path: Path,
+        files_dir: Path,
+        *,
+        source_label: str,
+        depth: int,
+        state: dict[str, int],
+        written: list[str],
+        skipped: list[str],
+        nested_archives: list[str],
+    ) -> None:
+        if depth > MAX_NESTED_ARCHIVE_DEPTH:
+            skipped.append(f"{source_label} [nested ZIP depth limit reached]")
+            return
+
+        with zipfile.ZipFile(archive_path) as archive:
+            for info in archive.infolist():
+                if info.is_dir():
+                    continue
+                original_name = info.filename
+                relative = Path(original_name)
+                if relative.is_absolute() or ".." in relative.parts:
+                    raise ValueError(f"unsafe ZIP member path: {original_name}")
+
+                display_name = f"{source_label}::{original_name}"
+                with archive.open(info) as src:
+                    data = src.read()
+                destination = self._write_extracted_bytes(
+                    data,
+                    original_name,
+                    files_dir,
+                    state=state,
+                    written=written,
+                    skipped=skipped,
+                    display_name=display_name,
+                )
+
+                if zipfile.is_zipfile(destination):
+                    nested_archives.append(display_name)
+                    self._extract_zip_archive(
+                        destination,
+                        files_dir,
+                        source_label=display_name,
+                        depth=depth + 1,
+                        state=state,
+                        written=written,
+                        skipped=skipped,
+                        nested_archives=nested_archives,
+                    )
+
+    def _copy_extracted_source(
+        self,
+        source: Path,
+        files_dir: Path,
+        *,
+        state: dict[str, int],
+        written: list[str],
+        skipped: list[str],
+    ) -> Path:
+        index = self._next_extract_index(state, source.name)
+        filename = self._extracted_filename(index, source.name)
+        destination = files_dir / filename
+        if destination.exists():
+            skipped.append(source.name)
+        else:
+            shutil.copy2(source, destination)
+            written.append(source.name)
+            state["materialized_files"] += 1
+        return destination
+
+    def _write_extracted_bytes(
+        self,
+        data: bytes,
+        original_name: str,
+        files_dir: Path,
+        *,
+        state: dict[str, int],
+        written: list[str],
+        skipped: list[str],
+        display_name: str,
+    ) -> Path:
+        index = self._next_extract_index(state, display_name)
+        filename = self._extracted_filename(index, original_name)
+        destination = files_dir / filename
+        if destination.exists():
+            skipped.append(display_name)
+        else:
+            destination.write_bytes(data)
+            written.append(display_name)
+            state["materialized_files"] += 1
+        return destination
+
+    @staticmethod
+    def _next_extract_index(state: dict[str, int], source_name: str) -> int:
+        materialized = state.get("materialized_files", 0)
+        if materialized >= MAX_EXTRACTED_ARCHIVE_FILES:
+            raise ValueError(
+                f"too many archive members while extracting {source_name}; "
+                f"limit={MAX_EXTRACTED_ARCHIVE_FILES}"
+            )
+        index = state["next_index"]
+        state["next_index"] = index + 1
+        return index
 
     @staticmethod
     def _extracted_filename(index: int, original_name: str) -> str:
