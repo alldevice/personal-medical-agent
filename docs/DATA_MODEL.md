@@ -8,7 +8,7 @@ The vault uses a layered storage model:
 - `/srv/hermes-medical/data/extracted/<document_id>/files` — one-time materialized working copy for fast access. ZIP members are flattened into short safe filenames; non-ZIP originals are copied here too.
 - `/srv/hermes-medical/data/extracted/<document_id>/manifest.json` — machine-readable link from working files back to the raw source path and SHA-256.
 - `/srv/hermes-medical/data/extracted_text` — future text/OCR output for search and summaries.
-- `/srv/hermes-medical/data/db/medical.sqlite` — SQLite metadata and timeline.
+- `/srv/hermes-medical/data/db/medical.sqlite` — SQLite metadata, timeline, and body parameters.
 
 Medical data directories are outside the Git repository and must not be committed.
 
@@ -78,6 +78,52 @@ Key fields:
 - source_quote
 - confidence
 - verified_by_user
+
+A timeline item answers: what happened at this point in time. A single composite
+source document can have many timeline items that all point to the same
+`document_id`.
+
+## body_parameters
+
+One row per time-linked body-state parameter.
+
+This is the structured layer for measurable or observable facts that should be
+available by time slice, not only as free text.
+
+Key fields:
+
+- id
+- document_id
+- timeline_item_id
+- observed_at
+- parameter_group
+- parameter_name
+- parameter_code
+- value_text
+- value_numeric
+- unit
+- reference_range
+- note
+- body_site
+- method
+- source_quote
+- confidence
+- verified_by_user
+
+Representation rules:
+
+- `observed_at` is the date or timestamp of the body-state slice.
+- `document_id` links the parameter to the immutable source when available.
+- `timeline_item_id` links the parameter to the event slice when available.
+- `value_numeric` stores the machine-comparable number when the value is numeric.
+- `value_text` stores exact text for ranges, qualitative findings, or composite values.
+- `unit` and `reference_range` must be preserved when present.
+- `source_quote` should contain a short source-grounded excerpt.
+- `confidence` must remain conservative for OCR or AI-extracted values.
+
+The search index includes this table with scope `body_parameter`, so queries for
+a parameter name, value, unit, body site, group, note, or source quote can find
+the structured parameter and its linked source.
 
 ## Patient self-reports
 
