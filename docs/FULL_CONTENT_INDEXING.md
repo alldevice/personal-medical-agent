@@ -22,11 +22,12 @@ Required behavior:
 - write a manifest that links every working copy back to the source document id and raw source;
 - extract searchable text into `/srv/hermes-medical/data/extracted_text` where possible;
 - record extraction failures or empty output without deleting the source;
-- rebuild SQLite FTS from extracted text and timeline notes;
+- rebuild SQLite FTS from extracted text, timeline notes, and structured `body_parameters`;
 - update `document_type`, `document_role`, and `role_note` when a source is a composite bundle;
-- add multiple source-linked timeline items when one source contains multiple important internal blocks.
+- add multiple source-linked timeline items when one source contains multiple important internal blocks;
+- add source-linked `body_parameters` for concrete body-state facts when present.
 
-The original source remains one document row. Additional timeline rows can point to the same `document_id`.
+The original source remains one document row. Additional timeline rows and body-parameter rows can point to the same `document_id`.
 
 ## CLI workflow
 
@@ -41,26 +42,29 @@ medical-agent content-audit --limit 300 --stdout
 Annotate a composite source without changing the raw file:
 
 ```bash
-medical-agent annotate-document \
-  --id <document_id> \
-  --type "composite clinical source" \
-  --role clinical_source \
-  --role-note "contains multiple source blocks; see linked timeline items"
+medical-agent annotate-document --id <document_id> --type "composite clinical source" --role clinical_source --role-note "contains multiple source blocks; see linked timeline items"
 ```
 
 Add a timeline item for an internal block in a composite source:
 
 ```bash
-medical-agent add-timeline \
-  --document-id <document_id> \
-  --date YYYY-MM-DD \
-  --event-type <event_type> \
-  --title "Short source-linked title" \
-  --body "Source-grounded summary of the internal block" \
-  --quote "Short source quote if available"
+medical-agent add-timeline --document-id <document_id> --date YYYY-MM-DD --event-type <event_type> --title "Short source-linked title" --body "Source-grounded summary of the internal block" --quote "Short source quote if available"
 ```
 
 Use conservative event types such as `lab_result`, `imaging`, `ecg`, `consultation`, `hospital_visit`, `procedure`, or `other`.
+
+Add a structured body-state fact for an internal block:
+
+```bash
+medical-agent add-body-parameter --document-id <document_id> --timeline-item-id <timeline_item_id> --observed-at YYYY-MM-DD --group <lab|vital|ecg|imaging|exam|symptom|medication|other> --parameter "Parameter name" --numeric-value <number-if-numeric> --value "exact text if qualitative" --unit "unit if present" --reference-range "range if present" --quote "short source quote" --confidence <0.3-1.0>
+```
+
+List or search structured body-state facts:
+
+```bash
+medical-agent body-parameters --limit 50
+medical-agent body-parameters --query "гемоглобин"
+```
 
 ## Audit output
 
@@ -81,15 +85,16 @@ The report highlights:
 
 ## Search acceptance
 
-After extraction, indexing, and semantic annotation, a clinically relevant source must be findable by content terms even if the outer filename is generic.
+After extraction, indexing, semantic annotation, and body-parameter indexing, a clinically relevant source must be findable by content terms even if the outer filename is generic.
 
 Negative search results should not be trusted until:
 
 1. `extract --all` completed;
 2. `index --all` completed;
 3. `content-audit` was reviewed;
-4. empty/failed OCR or text extraction cases were either fixed or marked for review.
+4. empty/failed OCR or text extraction cases were either fixed or marked for review;
+5. expected body-state facts were indexed as source-linked `body_parameters` where appropriate.
 
 ## Safety boundary
 
-This workflow improves source discovery only. It does not diagnose, prescribe, or turn OCR output into confirmed medical fact. OCR text and AI-generated timeline summaries must remain traceable to the source document and should preserve uncertainty when text quality is low.
+This workflow improves source discovery only. It does not diagnose, prescribe, or turn OCR output into confirmed medical fact. OCR text, AI-generated timeline summaries, and body-parameter rows must remain traceable to the source document and should preserve uncertainty when text quality is low.

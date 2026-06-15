@@ -1,6 +1,6 @@
 # Personal Medical Agent
 
-A **self-hosted, privacy-first personal medical archive assistant** built around a local vault, source-linked retrieval, a dedicated Hermes profile, and a Telegram-first user interface.
+A **self-hosted, privacy-first personal medical archive assistant** built around a local vault, source-linked retrieval, structured body-parameter indexing, a dedicated Hermes profile, and a Telegram-first user interface.
 
 The project is designed for people who want to keep their own medical documents under their control while still being able to ask an AI assistant to find, summarize, and prepare source-linked context from their personal health archive.
 
@@ -11,6 +11,7 @@ The project is designed for people who want to keep their own medical documents 
 - Stores original medical files in a local vault, outside Git.
 - Calculates SHA-256 for stored source files.
 - Keeps a SQLite index and a chronological timeline.
+- Maintains a source-linked `body_parameters` layer for time-linked lab values, vital signs, ECG/imaging facts, exam findings, symptoms, medication/allergy self-reports, and other body-state facts.
 - Classifies document rows with `document_role` and `role_note` so doctor-facing outputs can separate clinical sources from prescriptions, referrals, administrative/supporting records, context items, self-reports, and technical containers.
 - Extracts text from documents and keeps extracted working copies separate from originals.
 - Supports source-linked search and summary through the `medical-agent` CLI.
@@ -35,6 +36,8 @@ Telegram dedicated medical bot
 
 The primary deployment path currently assumes an existing Hermes runtime. A standalone or Docker-based distribution mode is planned later; it is not the primary MVP path yet.
 
+As of 2026-06-15, the live MVP also has operational structured body-parameter indexing for the current private archive snapshot. The code, schema, and documentation are stored in Git; private archive reports, backups, and medical data remain only under `/srv/hermes-medical/data` and must not be committed.
+
 ## Architecture at a glance
 
 ```mermaid
@@ -52,22 +55,24 @@ flowchart TD
     cli --> extract[Text extraction / OCR hook]
     cli --> index[SQLite FTS index]
     cli --> timeline[Chronological timeline]
+    cli --> params[Structured body_parameters]
 
     ingest --> vault[Local vault: raw originals]
     extract --> extracted[Extracted working copies]
     index --> db[(SQLite database)]
     timeline --> db
+    params --> db
 
     vault --> sources[Authoritative source facts]
     extracted --> retrieval[Source-linked retrieval]
     db --> retrieval
-    retrieval --> profile
 
+    retrieval --> profile
     memory -. preferences only .-> profile
     memory -. not medical source of truth .-> safety
 ```
 
-The important boundary is simple: **medical facts live in the local vault, SQLite, timeline, extracted working copies, or explicit current user messages. Honcho memory may help with continuity and preferences, but it must not become the authoritative medical record.**
+The important boundary is simple: **medical facts live in the local vault, SQLite, timeline, structured body parameters, extracted working copies, or explicit current user messages. Honcho memory may help with continuity and preferences, but it must not become the authoritative medical record.**
 
 ## Roadmap at a glance
 
@@ -82,6 +87,9 @@ flowchart LR
         d6[Basic OCR/text extraction]
         d7[SQLite FTS search]
         d8[Honcho conversational memory]
+        d9[Document-role metadata]
+        d10[Full-content audit]
+        d11[Structured body-parameter indexing]
     end
 
     subgraph now[Now]
@@ -89,22 +97,23 @@ flowchart LR
         n2[Better caption parser]
         n3[Document listing and conservative deletion]
         n4[Backup and restore runbook]
+        n5[Body-parameter QA for new archive batches]
     end
 
     subgraph next[Next]
         x1[Telegram search and summary commands]
         x2[Timeline normalization]
         x3[Audit log]
-        x4[GitHub CI and secret checks]
+        x4[Doctor preparation packets]
+        x5[GitHub CI and secret checks]
     end
 
     subgraph later[Later]
-        l1[Structured lab results]
-        l2[Medication and allergy list]
-        l3[Doctor visit preparation packets]
-        l4[Optional Docker packaging]
-        l5[Multi-user and caregiver mode]
-        l6[Encryption-at-rest research]
+        l1[Longitudinal trends and comparison views]
+        l2[Confirmed medication and allergy list]
+        l3[Optional Docker packaging]
+        l4[Multi-user and caregiver mode]
+        l5[Encryption-at-rest research]
     end
 
     done --> now --> next --> later
@@ -154,11 +163,7 @@ sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent init
 
 ```bash
 sudo -u hermes -H bash -lc 'echo "synthetic test document" > /tmp/medical-test.txt'
-sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent ingest \
-  --file /tmp/medical-test.txt \
-  --type "test-document" \
-  --date "2026-06-12" \
-  --comment "MVP smoke test"
+sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent ingest --file /tmp/medical-test.txt --type "test-document" --date "2026-06-12" --comment "MVP smoke test"
 sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent timeline --limit 5
 sudo -u hermes -H rm -f /tmp/medical-test.txt
 ```
@@ -179,6 +184,8 @@ Read these first:
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — architecture details.
 - [`docs/SAFETY_POLICY.md`](docs/SAFETY_POLICY.md) — medical safety boundary.
 - [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md) — current data model notes.
+- [`docs/FULL_CONTENT_INDEXING.md`](docs/FULL_CONTENT_INDEXING.md) — full-content extraction and composite-source indexing contract.
+- [`docs/BODY_PARAMETER_INDEXING_STATUS.md`](docs/BODY_PARAMETER_INDEXING_STATUS.md) — structured body-parameter indexing status and operational acceptance.
 
 ## For ChatGPT and other LLM agents
 

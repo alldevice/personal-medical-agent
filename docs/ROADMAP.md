@@ -11,6 +11,27 @@ Later     larger architecture change
 Research  needs investigation before implementation
 ```
 
+## Completed on live archive: structured body-parameter indexing
+
+Status: Implemented and operational for the current private archive snapshot as of 2026-06-15.
+
+Implemented:
+
+- `body_parameters` SQLite schema with source document and timeline links.
+- CLI commands: `add-body-parameter` and `body-parameters`.
+- FTS indexing with scope `body_parameter` alongside `document_text` and `timeline_note`.
+- Full-content audit and composite-source workflow for archives and multi-part documents.
+- Source-grounded indexing workflow for lab values, vital signs, ECG/imaging facts, exam findings, symptoms, medication/allergy self-reports, and other body-state facts.
+- Operational backups, consistency checks, and final search audit on the live private vault.
+
+Important privacy note: the schema, code, and process are documented in Git. Private medical data, local reports, backups, document ids, and extracted archive content remain under `/srv/hermes-medical/data` and must not be committed.
+
+Remaining acceptance:
+
+- Keep indexing future incoming documents through the same source-grounded workflow.
+- Add safer Telegram-facing search/summary commands that can surface `body_parameter` rows without exposing raw internals.
+- Improve QA for OCR/low-confidence rows and future duplicate prevention.
+
 ## Now: stabilize live MVP
 
 ### 1. End-to-end Telegram attachment ingest
@@ -123,9 +144,9 @@ Acceptance:
 
 ### 7. SQLite full-text search
 
-Status: Implemented as basic CLI FTS over extracted text and timeline notes; Telegram command integration remains next.
+Status: Implemented as CLI FTS over extracted text, timeline notes, and structured body parameters; Telegram command integration remains next.
 
-Add FTS over extracted text and timeline notes.
+Add FTS over extracted text, timeline notes, and structured body parameters.
 
 Commands:
 
@@ -136,8 +157,8 @@ Commands:
 
 Acceptance:
 
-- search returns source document ids;
-- answer distinguishes exact source text, extracted text, and interpretation.
+- search returns source document ids and structured body-parameter hits where applicable;
+- answer distinguishes exact source text, extracted text, structured source-grounded facts, and interpretation.
 
 Implementation note: basic CLI commands now exist:
 
@@ -145,6 +166,7 @@ Implementation note: basic CLI commands now exist:
 - `medical-agent search <query>`
 - `medical-agent summary <topic>`
 - `medical-agent telegram-cache-ingest --once`
+- `medical-agent body-parameters --query <query>`
 
 Remaining work: expose safe Telegram commands, improve OCR quality reporting, and add medical event normalization before correlation-style assistance.
 
@@ -170,34 +192,41 @@ Acceptance:
 - timeline can be filtered by event type;
 - events can link to one or more documents.
 
-## Later: structured medical data
+## Structured medical data and doctor workflows
 
-### 9. Lab results parser
+### 9. Body-parameter indexing
 
-Status: Later
+Status: Implemented as the `body_parameters` layer; continue QA and future-document indexing.
 
-Extract structured values from common lab reports.
+The structured layer stores source-grounded body-state facts, including lab values, vital signs, ECG/imaging facts, exam findings, symptoms, medication/allergy self-reports, and other observable or measurable facts.
 
-Schema idea:
+Core fields:
 
 ```text
-analyte
-value
+observed_at
+document_id
+timeline_item_id
+parameter_group
+parameter_name
+value_numeric
+value_text
 unit
 reference_range
-flag
-sample_date
-source_document_id
+source_quote
+confidence
 ```
 
 Acceptance:
 
 - values are traceable to source documents;
-- no medical conclusion is stored as fact unless it is in the source.
+- each row is linked to a time slice through `observed_at` and, where possible, a timeline item;
+- no medical conclusion is stored as fact unless it is in the source;
+- OCR and patient self-report uncertainty is preserved through confidence and notes;
+- FTS search returns `body_parameter` hits for clinically relevant parameter queries.
 
 ### 10. Medication and allergy list
 
-Status: Later
+Status: Partially represented as source-grounded `body_parameters` and patient self-reports; a curated user-confirmed list remains Next/Later.
 
 Track user-confirmed medications, allergies, intolerances, and contraindication notes.
 
@@ -208,7 +237,7 @@ Acceptance:
 
 ### 11. Doctor visit preparation mode
 
-Status: Later
+Status: Next
 
 Generate concise doctor-preparation packets:
 
@@ -269,7 +298,7 @@ Remaining acceptance for future work:
 
 - source medical facts remain in vault/SQLite;
 - Honcho memory can be rebuilt or ignored without data loss;
-- docs and runbook stay synchronized with runtime behavior;
+- docs and runbook stay synchronized with runtime behavior.
 
 ### 13. Agent self-feedback / disagreement log
 

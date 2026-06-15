@@ -19,7 +19,7 @@ The repository is the source of truth for the personal medical consultant system
 
 ## One-sentence system summary
 
-A dedicated Hermes `medical_consultant` profile answers through a dedicated Telegram gateway and uses a local medical vault, SQLite database, extracted working copies, timeline entries, and source-linked search to help the user navigate their own medical archive.
+A dedicated Hermes `medical_consultant` profile answers through a dedicated Telegram gateway and uses a local medical vault, SQLite database, extracted working copies, timeline entries, source-linked search, and structured `body_parameters` to help the user navigate their own medical archive.
 
 ## Current live shape
 
@@ -65,6 +65,8 @@ When asked to work with this repository, read these files in this order:
 8. `docs/ARCHITECTURE.md` — detailed architecture notes.
 9. `docs/SAFETY_POLICY.md` — medical safety boundary.
 10. `docs/DATA_MODEL.md` — current schema and data model notes.
+11. `docs/FULL_CONTENT_INDEXING.md` — full-content and composite-source indexing contract.
+12. `docs/BODY_PARAMETER_INDEXING_STATUS.md` — structured body-parameter indexing status.
 
 Do not infer live behavior from README alone. Prefer `docs/CURRENT_SYSTEM.md` for the current runtime state.
 
@@ -85,10 +87,16 @@ Current MVP capabilities include:
   - `medical-agent index`
   - `medical-agent search`
   - `medical-agent summary`
+  - `medical-agent content-audit`
+  - `medical-agent annotate-document`
+  - `medical-agent add-timeline`
+  - `medical-agent add-body-parameter`
+  - `medical-agent body-parameters`
   - `medical-agent telegram-cache-ingest --once`
 - basic extracted working copy layer;
 - basic text extraction/OCR hook;
-- basic SQLite FTS over extracted text and timeline notes;
+- SQLite FTS over extracted text, timeline notes, and structured `body_parameters`;
+- source-linked `body_parameters` for lab values, vital signs, ECG/imaging facts, exam findings, symptoms, medication/allergy self-reports, and other body-state facts;
 - Honcho conversational memory for preferences and continuity;
 - periodic Telegram cache ingest with replies for newly imported attachments and first-seen duplicate-SHA cache files when reply environment is enabled.
 
@@ -99,18 +107,20 @@ Use this as the compressed roadmap unless the user asks for detail:
 ```text
 Done / live MVP:
   dedicated profile, dedicated Telegram gateway, local vault, SQLite, ingest,
-  extracted working copies, basic text/OCR extraction, FTS search, Honcho memory.
+  extracted working copies, basic text/OCR extraction, FTS search, Honcho memory,
+  document-role metadata, full-content audit, and structured body-parameter indexing.
 
 Now:
   better caption parser, better Telegram attachment metadata,
-  document listing/deletion workflow, backup and restore runbook.
+  document listing/deletion workflow, backup/restore runbook,
+  and body-parameter QA for new archive batches.
 
 Next:
   Telegram search/summary commands, timeline normalization,
-  audit log, GitHub CI and secret checks.
+  audit log, doctor-preparation packets, GitHub CI and secret checks.
 
 Later:
-  structured lab results, medication/allergy list, doctor visit preparation packets,
+  longitudinal trends/comparison views, confirmed medication/allergy list,
   optional Docker packaging, multi-user/caregiver mode, encryption-at-rest research.
 ```
 

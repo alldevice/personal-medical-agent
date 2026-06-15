@@ -1,6 +1,6 @@
 # Current live system
 
-Last verified manually: 2026-06-13.
+Last verified manually: 2026-06-15.
 
 This document describes the live system as it actually exists on `ai-server`. It is the source of truth for the current MVP state.
 
@@ -46,7 +46,7 @@ The profile reuses Hermes provider/auth credentials by copying `auth.json` from 
 
 Expected service shape:
 
-```ini
+```text
 [Service]
 User=hermes
 Group=hermes
@@ -103,12 +103,14 @@ Data directories:
 
 ```text
 /srv/hermes-medical/data/raw
+/srv/hermes-medical/data/extracted
 /srv/hermes-medical/data/extracted_text
 /srv/hermes-medical/data/normalized
 /srv/hermes-medical/data/timeline
 /srv/hermes-medical/data/db
 /srv/hermes-medical/data/audit
 /srv/hermes-medical/data/backups
+/srv/hermes-medical/data/reports
 ```
 
 SQLite database:
@@ -124,14 +126,29 @@ document_role
 role_note
 ```
 
-The role layer is used to reduce noisy doctor-facing reports without deleting
-or rewriting originals. Current roles are: `clinical_source`,
-`treatment_order`, `referral_order`, `administrative_supporting`,
-`supporting_context`, `auxiliary_context`, `patient_self_report`, and
-`container_bundle`.
+The role layer is used to reduce noisy doctor-facing reports without deleting or rewriting originals. Current roles are: `clinical_source`, `treatment_order`, `referral_order`, `administrative_supporting`, `supporting_context`, `auxiliary_context`, `patient_self_report`, and `container_bundle`.
 
-Run `medical-agent init` after pulling schema changes; it applies lightweight
-SQLite migrations for existing vault databases.
+Run `medical-agent init` after pulling schema changes; it applies lightweight SQLite migrations for existing vault databases.
+
+## Structured body-parameter layer
+
+The live system includes a structured `body_parameters` table for source-linked, time-linked body-state facts.
+
+The layer is used for:
+
+- laboratory values;
+- vital signs;
+- ECG and functional-study measurements;
+- imaging and ultrasound findings;
+- endoscopy/procedure findings;
+- examination findings;
+- symptoms, medication self-reports, and allergy self-reports when source-grounded.
+
+Each row should preserve `observed_at`, `document_id`, `timeline_item_id` when available, parameter name, numeric or text value, unit, reference range, source quote, confidence, and cautious notes for OCR/self-report uncertainty.
+
+The FTS index includes `body_parameters` with scope `body_parameter`, alongside `document_text` and `timeline_note` rows.
+
+Current private archive verification reports and backups are stored under `/srv/hermes-medical/data/audit`, `/srv/hermes-medical/data/reports`, and `/srv/hermes-medical/data/backups`; they are intentionally not committed to Git.
 
 ## Runtime users
 
@@ -166,12 +183,19 @@ medical-agent extract
 medical-agent index
 medical-agent search
 medical-agent summary
+medical-agent content-audit
+medical-agent annotate-document
+medical-agent add-timeline
+medical-agent add-body-parameter
+medical-agent body-parameters
+medical-agent telegram-cache-ingest
 ```
 
 Smoke test command:
 
 ```bash
 sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent timeline --limit 5
+sudo -u hermes -H /srv/hermes-medical/repo/.venv/bin/medical-agent body-parameters --limit 5
 ```
 
 ## Telegram verification
@@ -208,17 +232,16 @@ Scope:
 - Honcho is used for conversational/context memory only.
 - Honcho can remember stable communication preferences, answer style, workflow preferences, and doctor-preparation style.
 - Honcho is not the medical source of truth.
-- Medical facts must remain grounded in `/srv/hermes-medical/data/raw`, `/srv/hermes-medical/data/db/medical.sqlite`, timeline entries, extracted working copies, or explicit current user messages.
+- Medical facts must remain grounded in `/srv/hermes-medical/data/raw`, `/srv/hermes-medical/data/db/medical.sqlite`, timeline entries, body parameters, extracted working copies, or explicit current user messages.
 - If a medical claim comes only from Honcho memory, the assistant must label it as conversation memory and not document-confirmed.
 
 Historical note: early pre-alias Honcho rows may contain peer `237187787`. New medical traffic after the alias repair should use `human_sergei`.
 
 ## Current limitations
 
-- Telegram attachment-to-vault ingest is not yet fully automated end-to-end.
-- Basic extracted working copies, text extraction, OCR hook, SQLite FTS search,
-  and document-role metadata now exist as CLI/data-layer capabilities.
-- Telegram commands for search/summary and deeper medical comparison workflows are not yet integrated into the live bot.
+- Telegram attachment-to-vault ingest is implemented through cache ingest/timer support, with caption/cache policy and Telegram UX still improving.
+- Extracted working copies, text extraction, OCR hook, SQLite FTS search, document-role metadata, content audit, and structured `body_parameters` now exist as CLI/data-layer capabilities.
+- Telegram commands for search/summary, direct body-parameter views, and deeper medical comparison workflows are not yet integrated into the live bot.
 - Honcho conversational memory is integrated, but only as non-authoritative conversation/context memory.
 - Multi-user mode is not yet implemented.
 - Postgres is not yet used; SQLite is the current database.
